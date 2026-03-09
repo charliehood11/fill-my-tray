@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { SchedulerComponent } from '../../types/scheduler';
+import { toast } from '@/hooks/use-toast';
 
 interface ComponentUploadProps {
   components: SchedulerComponent[];
@@ -22,6 +23,11 @@ const ComponentUpload: React.FC<ComponentUploadProps> = ({ components, onCompone
           onComponentsUpdate(componentList);
         } catch (error) {
           console.error('Error parsing component JSON:', error);
+          toast({
+            title: 'Upload Failed',
+            description: `Invalid JSON file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            variant: 'destructive',
+          });
         }
       };
       reader.readAsText(file);

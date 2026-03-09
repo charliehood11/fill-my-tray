@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { OperationsData } from '../../types/processing';
+import { toast } from '@/hooks/use-toast';
 
 interface OperationsUploadProps {
   operations: OperationsData;
@@ -40,9 +41,11 @@ const OperationsUpload: React.FC<OperationsUploadProps> = ({
             }
           } else {
             console.error('Unexpected data format:', data);
+            toast({ title: 'Upload Failed', description: 'Unexpected data format. Expected an object with K-number keys or an "operations" property.', variant: 'destructive' });
           }
         } catch (error) {
           console.error('Error parsing operations JSON:', error);
+          toast({ title: 'Upload Failed', description: `Invalid JSON file: ${error instanceof Error ? error.message : 'Unknown error'}`, variant: 'destructive' });
         }
       };
       reader.readAsText(file);
