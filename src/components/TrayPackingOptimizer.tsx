@@ -127,43 +127,76 @@ const TrayPackingOptimizerComponent = () => {
 
   const handleTrayUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target?.result as string);
-          setTrays(Array.isArray(data) ? data : [data]);
-          setSelectedTray(''); // Reset selection when new data is uploaded
-        } catch (error) {
-          console.error('Error parsing tray JSON:', error);
-        }
-      };
-      reader.readAsText(file);
-    }
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        const trayList = validateTrays(data);
+        setTrays(trayList);
+        setSelectedTray(''); // Reset selection when new data is uploaded
+      } catch (error) {
+        console.error('Error parsing tray JSON:', error);
+        toast({
+          title: 'Tray Upload Failed',
+          description: error instanceof Error ? error.message : 'Invalid JSON format.',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    reader.onerror = () => {
+      toast({
+        title: 'Tray Upload Failed',
+        description: 'Unable to read the selected file.',
+        variant: 'destructive',
+      });
+    };
+
+    reader.readAsText(file);
+    event.target.value = '';
   };
 
   const handleComponentUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target?.result as string);
-          const componentList = Array.isArray(data) ? data : [data];
-          setComponents(componentList);
-          
-          // Initialize component settings for new data
-          const initialSettings: {[key: string]: {quantity: number, priority: 'low' | 'medium' | 'high' | 'critical'}} = {};
-          componentList.forEach(comp => {
-            initialSettings[comp.id] = { quantity: comp.quantity || 1, priority: 'medium' };
-          });
-          setComponentSettings(initialSettings);
-        } catch (error) {
-          console.error('Error parsing component JSON:', error);
-        }
-      };
-      reader.readAsText(file);
-    }
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        const componentList = validateComponents(data);
+        setComponents(componentList);
+
+        // Initialize component settings for new data
+        const initialSettings: {[key: string]: {quantity: number, priority: 'low' | 'medium' | 'high' | 'critical'}} = {};
+        componentList.forEach(comp => {
+          initialSettings[comp.id] = { quantity: comp.quantity || 1, priority: 'medium' };
+        });
+        setComponentSettings(initialSettings);
+      } catch (error) {
+        console.error('Error parsing component JSON:', error);
+        toast({
+          title: 'Component Upload Failed',
+          description: error instanceof Error ? error.message : 'Invalid JSON format.',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    reader.onerror = () => {
+      toast({
+        title: 'Component Upload Failed',
+        description: 'Unable to read the selected file.',
+        variant: 'destructive',
+      });
+    };
+
+    reader.readAsText(file);
+    event.target.value = '';
   };
 
   const updateComponentQuantity = (componentId: string, quantity: number) => {
