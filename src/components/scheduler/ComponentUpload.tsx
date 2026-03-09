@@ -11,6 +11,58 @@ interface ComponentUploadProps {
   onComponentsUpdate: (components: SchedulerComponent[]) => void;
 }
 
+const allowedPriorities = ['low', 'medium', 'high', 'critical'] as const;
+
+const validateComponents = (data: unknown): SchedulerComponent[] => {
+  const componentList = Array.isArray(data) ? data : [data];
+
+  if (componentList.length === 0) {
+    throw new Error('File is empty. Add at least one component object.');
+  }
+
+  componentList.forEach((item, index) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error(`Component ${index + 1}: must be an object.`);
+    }
+
+    const component = item as Partial<SchedulerComponent>;
+
+    if (!component.id || typeof component.id !== 'string') {
+      throw new Error(`Component ${index + 1}: "id" is required and must be a string.`);
+    }
+
+    if (typeof component.w !== 'number' || !Number.isFinite(component.w) || component.w <= 0) {
+      throw new Error(`Component ${index + 1} (${component.id}): "w" must be a positive number.`);
+    }
+
+    if (typeof component.d !== 'number' || !Number.isFinite(component.d) || component.d <= 0) {
+      throw new Error(`Component ${index + 1} (${component.id}): "d" must be a positive number.`);
+    }
+
+    if (!component.k || typeof component.k !== 'string') {
+      throw new Error(`Component ${index + 1} (${component.id}): "k" is required and must be a string.`);
+    }
+
+    if (
+      component.quantity !== undefined &&
+      (typeof component.quantity !== 'number' || !Number.isFinite(component.quantity) || component.quantity < 0)
+    ) {
+      throw new Error(`Component ${index + 1} (${component.id}): "quantity" must be a non-negative number.`);
+    }
+
+    if (
+      component.priority !== undefined &&
+      !allowedPriorities.includes(component.priority)
+    ) {
+      throw new Error(
+        `Component ${index + 1} (${component.id}): "priority" must be one of ${allowedPriorities.join(', ')}.`
+      );
+    }
+  });
+
+  return componentList as SchedulerComponent[];
+};
+
 const ComponentUpload: React.FC<ComponentUploadProps> = ({ components, onComponentsUpdate }) => {
   const handleComponentUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -19,18 +71,19 @@ const ComponentUpload: React.FC<ComponentUploadProps> = ({ components, onCompone
       reader.onload = (e) => {
         try {
           const data = JSON.parse(e.target?.result as string);
-          const componentList = Array.isArray(data) ? data : [data];
+          const componentList = validateComponents(data);
           onComponentsUpdate(componentList);
         } catch (error) {
           console.error('Error parsing component JSON:', error);
           toast({
             title: 'Upload Failed',
-            description: `Invalid JSON file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            description: error instanceof Error ? error.message : 'Unknown error',
             variant: 'destructive',
           });
         }
       };
       reader.readAsText(file);
+      event.target.value = '';
     }
   };
 
