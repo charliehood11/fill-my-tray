@@ -23,6 +23,11 @@ const ComponentUpload: React.FC<ComponentUploadProps> = ({ components, onCompone
           onComponentsUpdate(componentList);
         } catch (error) {
           console.error('Error parsing component JSON:', error);
+          toast({
+            title: 'Upload Failed',
+            description: `Invalid JSON file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            variant: 'destructive',
+          });
         }
       };
       reader.readAsText(file);

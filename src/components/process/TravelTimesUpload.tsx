@@ -40,9 +40,11 @@ const TravelTimesUpload: React.FC<TravelTimesUploadProps> = ({
             }
           } else {
             console.error('Unexpected travel times format:', data);
+            toast({ title: 'Upload Failed', description: 'Unexpected data format. Expected an object with operation keys or a "Travel_Times" property.', variant: 'destructive' });
           }
         } catch (error) {
           console.error('Error parsing travel times JSON:', error);
+          toast({ title: 'Upload Failed', description: `Invalid JSON file: ${error instanceof Error ? error.message : 'Unknown error'}`, variant: 'destructive' });
         }
       };
       reader.readAsText(file);
