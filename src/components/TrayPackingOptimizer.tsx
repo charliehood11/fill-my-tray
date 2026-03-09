@@ -10,6 +10,7 @@ import { TrayPackingOptimizer } from '../utils/packingAlgorithm';
 import { Tray, Component, PackingResult } from '../types/packing';
 import { Upload, Package, Settings, BarChart3, Plus, Minus } from 'lucide-react';
 import TrayVisualization from './TrayVisualization';
+import { toast } from '@/hooks/use-toast';
 
 // Default data
 const defaultTrays: Tray[] = [
@@ -33,6 +34,81 @@ const defaultComponents: Component[] = [
   {"id":"C12","w":110,"d":21}
 ];
 
+const allowedPriorities = ['low', 'medium', 'high', 'critical'] as const;
+
+const validateTrays = (data: unknown): Tray[] => {
+  const trayList = Array.isArray(data) ? data : [data];
+
+  if (trayList.length === 0) {
+    throw new Error('No trays found in file.');
+  }
+
+  trayList.forEach((item, index) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error(`Tray ${index + 1}: must be an object.`);
+    }
+
+    const tray = item as Partial<Tray>;
+
+    if (!tray.id || typeof tray.id !== 'string') {
+      throw new Error(`Tray ${index + 1}: "id" is required and must be a string.`);
+    }
+
+    if (typeof tray.width !== 'number' || !Number.isFinite(tray.width) || tray.width <= 0) {
+      throw new Error(`Tray ${index + 1} (${tray.id}): "width" must be a positive number.`);
+    }
+
+    if (typeof tray.depth !== 'number' || !Number.isFinite(tray.depth) || tray.depth <= 0) {
+      throw new Error(`Tray ${index + 1} (${tray.id}): "depth" must be a positive number.`);
+    }
+  });
+
+  return trayList as Tray[];
+};
+
+const validateComponents = (data: unknown): Component[] => {
+  const componentList = Array.isArray(data) ? data : [data];
+
+  if (componentList.length === 0) {
+    throw new Error('No components found in file.');
+  }
+
+  componentList.forEach((item, index) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error(`Component ${index + 1}: must be an object.`);
+    }
+
+    const component = item as Partial<Component>;
+
+    if (!component.id || typeof component.id !== 'string') {
+      throw new Error(`Component ${index + 1}: "id" is required and must be a string.`);
+    }
+
+    if (typeof component.w !== 'number' || !Number.isFinite(component.w) || component.w <= 0) {
+      throw new Error(`Component ${index + 1} (${component.id}): "w" must be a positive number.`);
+    }
+
+    if (typeof component.d !== 'number' || !Number.isFinite(component.d) || component.d <= 0) {
+      throw new Error(`Component ${index + 1} (${component.id}): "d" must be a positive number.`);
+    }
+
+    if (
+      component.quantity !== undefined &&
+      (typeof component.quantity !== 'number' || !Number.isFinite(component.quantity) || component.quantity < 0)
+    ) {
+      throw new Error(`Component ${index + 1} (${component.id}): "quantity" must be a non-negative number.`);
+    }
+
+    if (component.priority !== undefined && !allowedPriorities.includes(component.priority)) {
+      throw new Error(
+        `Component ${index + 1} (${component.id}): "priority" must be one of ${allowedPriorities.join(', ')}.`
+      );
+    }
+  });
+
+  return componentList as Component[];
+};
+
 const TrayPackingOptimizerComponent = () => {
   const [trays, setTrays] = useState<Tray[]>(defaultTrays);
   const [components, setComponents] = useState<Component[]>(defaultComponents);
@@ -51,43 +127,76 @@ const TrayPackingOptimizerComponent = () => {
 
   const handleTrayUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target?.result as string);
-          setTrays(Array.isArray(data) ? data : [data]);
-          setSelectedTray(''); // Reset selection when new data is uploaded
-        } catch (error) {
-          console.error('Error parsing tray JSON:', error);
-        }
-      };
-      reader.readAsText(file);
-    }
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        const trayList = validateTrays(data);
+        setTrays(trayList);
+        setSelectedTray(''); // Reset selection when new data is uploaded
+      } catch (error) {
+        console.error('Error parsing tray JSON:', error);
+        toast({
+          title: 'Tray Upload Failed',
+          description: error instanceof Error ? error.message : 'Invalid JSON format.',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    reader.onerror = () => {
+      toast({
+        title: 'Tray Upload Failed',
+        description: 'Unable to read the selected file.',
+        variant: 'destructive',
+      });
+    };
+
+    reader.readAsText(file);
+    event.target.value = '';
   };
 
   const handleComponentUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target?.result as string);
-          const componentList = Array.isArray(data) ? data : [data];
-          setComponents(componentList);
-          
-          // Initialize component settings for new data
-          const initialSettings: {[key: string]: {quantity: number, priority: 'low' | 'medium' | 'high' | 'critical'}} = {};
-          componentList.forEach(comp => {
-            initialSettings[comp.id] = { quantity: comp.quantity || 1, priority: 'medium' };
-          });
-          setComponentSettings(initialSettings);
-        } catch (error) {
-          console.error('Error parsing component JSON:', error);
-        }
-      };
-      reader.readAsText(file);
-    }
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        const componentList = validateComponents(data);
+        setComponents(componentList);
+
+        // Initialize component settings for new data
+        const initialSettings: {[key: string]: {quantity: number, priority: 'low' | 'medium' | 'high' | 'critical'}} = {};
+        componentList.forEach(comp => {
+          initialSettings[comp.id] = { quantity: comp.quantity || 1, priority: 'medium' };
+        });
+        setComponentSettings(initialSettings);
+      } catch (error) {
+        console.error('Error parsing component JSON:', error);
+        toast({
+          title: 'Component Upload Failed',
+          description: error instanceof Error ? error.message : 'Invalid JSON format.',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    reader.onerror = () => {
+      toast({
+        title: 'Component Upload Failed',
+        description: 'Unable to read the selected file.',
+        variant: 'destructive',
+      });
+    };
+
+    reader.readAsText(file);
+    event.target.value = '';
   };
 
   const updateComponentQuantity = (componentId: string, quantity: number) => {
