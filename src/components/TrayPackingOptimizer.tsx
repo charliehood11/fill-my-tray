@@ -124,6 +124,9 @@ const TrayPackingOptimizerComponent = () => {
   const [spacing, setSpacing] = useState(100);
   const [edgeSpacing, setEdgeSpacing] = useState(100);
   const [allowRotation, setAllowRotation] = useState(true);
+  const [packingMode, setPackingMode] = useState<'precise' | 'grid'>('precise');
+  const [gridColumns, setGridColumns] = useState(12);
+  const [gridRows, setGridRows] = useState(5);
 
   const handleTrayUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
