@@ -241,7 +241,10 @@ const TrayPackingOptimizerComponent = () => {
       spacing,
       edgeSpacing,
       allowRotation,
-      optimizationLevel: 'balanced'
+      optimizationLevel: 'balanced',
+      packingMode,
+      gridColumns,
+      gridRows,
     });
 
     const result = optimizer.packTray(tray, selectedComponents);
