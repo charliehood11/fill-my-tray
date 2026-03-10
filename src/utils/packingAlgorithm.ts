@@ -79,6 +79,122 @@ export class TrayPackingOptimizer {
     };
   }
 
+  // Grid-based packing: 12 columns × 5 rows, components span cells, no overlap
+  private gridPack(tray: Tray, components: Component[]): PackingResult {
+    const cols = this.gridColumns;
+    const rows = this.gridRows;
+    const cellW = tray.width / cols;
+    const cellH = tray.depth / rows;
+
+    let remaining = [...components];
+    const trayResults: TrayResult[] = [];
+    let trayNumber = 1;
+
+    while (remaining.length > 0) {
+      // Track occupied cells as a flat boolean array
+      const occupied = new Array(cols * rows).fill(false);
+      const placedComponents: PlacedComponent[] = [];
+      const stillRemaining: Component[] = [];
+
+      for (const component of remaining) {
+        // Determine how many cells this component spans
+        const spanCols = Math.ceil(component.w / cellW);
+        const spanRows = Math.ceil(component.d / cellH);
+
+        // Try rotated orientation too
+        let placed = false;
+        const orientations: { w: number; h: number; sCols: number; sRows: number; rot: 0 | 90 }[] = [
+          { w: component.w, h: component.d, sCols: spanCols, sRows: spanRows, rot: 0 },
+        ];
+        if (this.allowRotation) {
+          const rCols = Math.ceil(component.d / cellW);
+          const rRows = Math.ceil(component.w / cellH);
+          orientations.push({ w: component.d, h: component.w, sCols: rCols, sRows: rRows, rot: 90 });
+        }
+
+        for (const orient of orientations) {
+          if (placed) break;
+          if (orient.sCols > cols || orient.sRows > rows) continue;
+
+          // Scan cells top-left to bottom-right
+          for (let r = 0; r <= rows - orient.sRows; r++) {
+            if (placed) break;
+            for (let c = 0; c <= cols - orient.sCols; c++) {
+              // Check if all cells in the span are free
+              let canPlace = true;
+              for (let dr = 0; dr < orient.sRows && canPlace; dr++) {
+                for (let dc = 0; dc < orient.sCols && canPlace; dc++) {
+                  if (occupied[(r + dr) * cols + (c + dc)]) {
+                    canPlace = false;
+                  }
+                }
+              }
+
+              if (canPlace) {
+                // Mark cells as occupied
+                for (let dr = 0; dr < orient.sRows; dr++) {
+                  for (let dc = 0; dc < orient.sCols; dc++) {
+                    occupied[(r + dr) * cols + (c + dc)] = true;
+                  }
+                }
+
+                placedComponents.push({
+                  id: component.id,
+                  w: component.w,
+                  d: component.d,
+                  name: component.name,
+                  priority: component.priority,
+                  x: c * cellW,
+                  y: r * cellH,
+                  width: orient.w,
+                  height: orient.h,
+                  rotation: orient.rot,
+                });
+                placed = true;
+              }
+            }
+          }
+        }
+
+        if (!placed) {
+          stillRemaining.push(component);
+        }
+      }
+
+      if (placedComponents.length === 0) break; // Nothing fits
+
+      const totalArea = tray.width * tray.depth;
+      const usedArea = placedComponents.reduce((sum, c) => sum + c.width * c.height, 0);
+
+      trayResults.push({
+        tray: { ...tray, id: `${tray.id}_${trayNumber}` },
+        trayNumber,
+        placedComponents,
+        totalArea,
+        usedArea,
+        efficiency: (usedArea / totalArea) * 100,
+        remainingSpace: [],
+      });
+
+      remaining = stillRemaining;
+      trayNumber++;
+    }
+
+    const totalPlaced = trayResults.reduce((sum, r) => sum + r.placedComponents.length, 0);
+    const avgEfficiency = trayResults.length > 0
+      ? trayResults.reduce((sum, r) => sum + r.efficiency, 0) / trayResults.length
+      : 0;
+
+    return {
+      trayResults,
+      unplacedComponents: remaining,
+      totalTraysUsed: trayResults.length,
+      totalComponentsPlaced: totalPlaced,
+      averageEfficiency: avgEfficiency,
+      recommendations: [],
+    };
+  }
+
   // Legacy single-tray method (kept for compatibility)
   packTray(tray: Tray, components: Component[]): PackingResult {
     return this.packTrays(tray, components);
