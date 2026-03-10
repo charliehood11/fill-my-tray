@@ -124,6 +124,9 @@ const TrayPackingOptimizerComponent = () => {
   const [spacing, setSpacing] = useState(100);
   const [edgeSpacing, setEdgeSpacing] = useState(100);
   const [allowRotation, setAllowRotation] = useState(true);
+  const [packingMode, setPackingMode] = useState<'precise' | 'grid'>('precise');
+  const [gridColumns, setGridColumns] = useState(12);
+  const [gridRows, setGridRows] = useState(5);
 
   const handleTrayUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -238,7 +241,10 @@ const TrayPackingOptimizerComponent = () => {
       spacing,
       edgeSpacing,
       allowRotation,
-      optimizationLevel: 'balanced'
+      optimizationLevel: 'balanced',
+      packingMode,
+      gridColumns,
+      gridRows,
     });
 
     const result = optimizer.packTray(tray, selectedComponents);
@@ -482,6 +488,41 @@ const TrayPackingOptimizerComponent = () => {
                   />
                   <Label htmlFor="rotation">Allow 90° rotation</Label>
                 </div>
+
+                <div className="border-t pt-4 space-y-3">
+                  <Label className="font-semibold">Packing Mode</Label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="packingMode" value="precise"
+                        checked={packingMode === 'precise'}
+                        onChange={() => setPackingMode('precise')} />
+                      <span className="text-sm">Precise (slower, optimal)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="packingMode" value="grid"
+                        checked={packingMode === 'grid'}
+                        onChange={() => setPackingMode('grid')} />
+                      <span className="text-sm">Grid (fast, 1000s of parts)</span>
+                    </label>
+                  </div>
+                  {packingMode === 'grid' && (
+                    <div className="grid grid-cols-2 gap-4 pl-4">
+                      <div>
+                        <Label htmlFor="gridCols">Columns</Label>
+                        <Input id="gridCols" type="number" value={gridColumns}
+                          onChange={(e) => setGridColumns(Math.max(1, Number(e.target.value)))}
+                          min="1" max="50" />
+                      </div>
+                      <div>
+                        <Label htmlFor="gridRows">Rows</Label>
+                        <Input id="gridRows" type="number" value={gridRows}
+                          onChange={(e) => setGridRows(Math.max(1, Number(e.target.value)))}
+                          min="1" max="50" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <Button 
                   onClick={runOptimization}
                   disabled={!selectedTray || components.filter(comp => (componentSettings[comp.id]?.quantity || 0) > 0).length === 0}
@@ -537,7 +578,7 @@ const TrayPackingOptimizerComponent = () => {
                       <CardTitle>Tray {trayResult.trayNumber} — {trayResult.tray.name || trayResult.tray.id.split('_')[0]} ({trayResult.efficiency.toFixed(1)}% efficiency, {trayResult.placedComponents.length} components)</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <TrayVisualization result={trayResult} />
+                      <TrayVisualization result={trayResult} gridColumns={packingMode === 'grid' ? gridColumns : undefined} gridRows={packingMode === 'grid' ? gridRows : undefined} />
                       <div className="grid md:grid-cols-2 gap-4 mt-4">
                         {trayResult.placedComponents.map((comp, index) => (
                           <div key={index} className="p-3 border rounded-lg">
