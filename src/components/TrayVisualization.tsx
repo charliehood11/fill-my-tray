@@ -4,9 +4,11 @@ import { TrayResult } from '../types/packing';
 interface TrayVisualizationProps {
   result: TrayResult;
   scale?: number;
+  gridColumns?: number;
+  gridRows?: number;
 }
 
-const TrayVisualization: React.FC<TrayVisualizationProps> = ({ result, scale = 0.2 }) => {
+const TrayVisualization: React.FC<TrayVisualizationProps> = ({ result, scale = 0.2, gridColumns, gridRows }) => {
   const { tray, placedComponents } = result;
   
   const scaledTrayWidth = tray.width * scale;
@@ -22,28 +24,52 @@ const TrayVisualization: React.FC<TrayVisualizationProps> = ({ result, scale = 0
     }
   };
 
+  const renderGridLines = () => {
+    if (!gridColumns || !gridRows) return null;
+    const lines = [];
+    const cellW = scaledTrayWidth / gridColumns;
+    const cellH = scaledTrayDepth / gridRows;
+
+    for (let c = 1; c < gridColumns; c++) {
+      lines.push(
+        <line key={`col-${c}`} x1={10 + c * cellW} y1={10} x2={10 + c * cellW} y2={10 + scaledTrayDepth}
+          stroke="#cbd5e1" strokeWidth="0.5" strokeDasharray="4,2" />
+      );
+    }
+    for (let r = 1; r < gridRows; r++) {
+      lines.push(
+        <line key={`row-${r}`} x1={10} y1={10 + r * cellH} x2={10 + scaledTrayWidth} y2={10 + r * cellH}
+          stroke="#cbd5e1" strokeWidth="0.5" strokeDasharray="4,2" />
+      );
+    }
+    return lines;
+  };
+
   return (
     <div className="w-full">
       <div className="mb-4">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           Scale: 1:{Math.round(1/scale)} | Tray: {tray.width}×{tray.depth}mm
+          {gridColumns && gridRows && ` | Grid: ${gridColumns}×${gridRows}`}
         </p>
       </div>
       
       <div className="flex justify-center">
-        <div className="relative border-2 border-gray-400 bg-gray-100 rounded-lg p-2">
+        <div className="relative border-2 border-border bg-muted rounded-lg p-2">
           <svg
             width={scaledTrayWidth + 20}
             height={scaledTrayDepth + 20}
-            className="bg-white border border-gray-300 rounded"
+            className="bg-background border border-border rounded"
           >
             <rect x={10} y={10} width={scaledTrayWidth} height={scaledTrayDepth}
               fill="none" stroke="#374151" strokeWidth="2" />
             
+            {renderGridLines()}
+            
             <text x={10 + scaledTrayWidth / 2} y={8} textAnchor="middle"
-              className="fill-gray-600 text-xs" fontSize="10">{tray.width}mm</text>
+              className="fill-muted-foreground text-xs" fontSize="10">{tray.width}mm</text>
             <text x={6} y={10 + scaledTrayDepth / 2} textAnchor="middle"
-              className="fill-gray-600 text-xs" fontSize="10"
+              className="fill-muted-foreground text-xs" fontSize="10"
               transform={`rotate(-90, 6, ${10 + scaledTrayDepth / 2})`}>{tray.depth}mm</text>
             
             {placedComponents.map((component, index) => {

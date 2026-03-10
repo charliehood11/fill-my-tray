@@ -578,7 +578,7 @@ const TrayPackingOptimizerComponent = () => {
                       <CardTitle>Tray {trayResult.trayNumber} — {trayResult.tray.name || trayResult.tray.id.split('_')[0]} ({trayResult.efficiency.toFixed(1)}% efficiency, {trayResult.placedComponents.length} components)</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <TrayVisualization result={trayResult} />
+                      <TrayVisualization result={trayResult} gridColumns={packingMode === 'grid' ? gridColumns : undefined} gridRows={packingMode === 'grid' ? gridRows : undefined} />
                       <div className="grid md:grid-cols-2 gap-4 mt-4">
                         {trayResult.placedComponents.map((comp, index) => (
                           <div key={index} className="p-3 border rounded-lg">
