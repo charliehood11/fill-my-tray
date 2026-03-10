@@ -172,14 +172,17 @@ const TrayPackingOptimizerComponent = () => {
       try {
         const data = JSON.parse(e.target?.result as string);
         const componentList = validateComponents(data);
-        setComponents(componentList);
-
-        // Initialize component settings for new data
+        
+        // Initialize component settings for new data, using quantity from JSON
         const initialSettings: {[key: string]: {quantity: number, priority: 'low' | 'medium' | 'high' | 'critical'}} = {};
         componentList.forEach(comp => {
-          initialSettings[comp.id] = { quantity: comp.quantity || 1, priority: 'medium' };
+          initialSettings[comp.id] = { quantity: comp.quantity || 1, priority: (comp.priority as 'low' | 'medium' | 'high' | 'critical') || 'medium' };
         });
         setComponentSettings(initialSettings);
+
+        // Strip quantity/priority from stored components so they don't get double-applied
+        const cleanedComponents = componentList.map(({ quantity, priority, ...rest }) => rest) as Component[];
+        setComponents(cleanedComponents);
       } catch (error) {
         console.error('Error parsing component JSON:', error);
         toast({
@@ -522,6 +525,15 @@ const TrayPackingOptimizerComponent = () => {
                     </div>
                   )}
                 </div>
+
+                {(() => {
+                  const totalParts = components.reduce((sum, comp) => sum + (componentSettings[comp.id]?.quantity || 0), 0);
+                  return totalParts > 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Total parts to pack: <strong>{totalParts.toLocaleString()}</strong> ({components.filter(c => (componentSettings[c.id]?.quantity || 0) > 0).length} unique types)
+                    </p>
+                  ) : null;
+                })()}
 
                 <Button 
                   onClick={runOptimization}
