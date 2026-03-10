@@ -151,6 +151,7 @@ export class TrayPackingOptimizer {
                   rotation: orient.rot,
                 });
                 placed = true;
+                break; // Exit column loop once component is placed
               }
             }
           }
@@ -203,7 +204,8 @@ export class TrayPackingOptimizer {
   private expandComponentsByQuantity(components: Component[]): Component[] {
     const expanded: Component[] = [];
     components.forEach(component => {
-      const quantity = component.quantity || 1;
+      // Ensure quantity is a valid positive number, default to 1
+      const quantity = Math.max(1, Number(component.quantity) || 1);
       for (let i = 0; i < quantity; i++) {
         expanded.push({ ...component, id: `${component.id}_${i + 1}`, quantity: 1 });
       }
