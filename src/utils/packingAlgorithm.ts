@@ -13,18 +13,28 @@ export class TrayPackingOptimizer {
   private edgeSpacing: number;
   private allowRotation: boolean;
   private optimizationLevel: string;
+  private packingMode: 'precise' | 'grid';
+  private gridColumns: number;
+  private gridRows: number;
 
   constructor(options: PackingOptions) {
     this.spacing = options.spacing;
     this.edgeSpacing = options.edgeSpacing;
     this.allowRotation = options.allowRotation;
     this.optimizationLevel = options.optimizationLevel;
+    this.packingMode = options.packingMode || 'precise';
+    this.gridColumns = options.gridColumns || 12;
+    this.gridRows = options.gridRows || 5;
   }
 
   // Main packing function - packs across multiple trays
   packTrays(tray: Tray, components: Component[]): PackingResult {
     const expandedComponents = this.expandComponentsByQuantity(components);
     const sortedComponents = this.sortComponentsByPriority(expandedComponents);
+
+    if (this.packingMode === 'grid') {
+      return this.gridPack(tray, sortedComponents);
+    }
 
     let remaining = [...sortedComponents];
     const trayResults: TrayResult[] = [];
@@ -33,7 +43,7 @@ export class TrayPackingOptimizer {
     while (remaining.length > 0) {
       const singleResult = this.packSingleTray(tray, remaining);
       
-      if (singleResult.placedComponents.length === 0) break; // Nothing more can fit
+      if (singleResult.placedComponents.length === 0) break;
 
       const freeSpaces = this.calculateFreeSpaces(tray, singleResult.placedComponents);
 

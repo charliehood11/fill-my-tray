@@ -68,4 +68,7 @@ export interface PackingOptions {
   edgeSpacing: number; // Default 100mm from tray edges
   allowRotation: boolean;
   optimizationLevel: 'fast' | 'balanced' | 'thorough';
+  packingMode?: 'precise' | 'grid'; // grid = 12×5 cell-based packing
+  gridColumns?: number; // Default 12
+  gridRows?: number; // Default 5
 }
