@@ -526,6 +526,15 @@ const TrayPackingOptimizerComponent = () => {
                   )}
                 </div>
 
+                {(() => {
+                  const totalParts = components.reduce((sum, comp) => sum + (componentSettings[comp.id]?.quantity || 0), 0);
+                  return totalParts > 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Total parts to pack: <strong>{totalParts.toLocaleString()}</strong> ({components.filter(c => (componentSettings[c.id]?.quantity || 0) > 0).length} unique types)
+                    </p>
+                  ) : null;
+                })()}
+
                 <Button 
                   onClick={runOptimization}
                   disabled={!selectedTray || components.filter(comp => (componentSettings[comp.id]?.quantity || 0) > 0).length === 0}
