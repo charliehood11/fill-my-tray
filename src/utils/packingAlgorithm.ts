@@ -158,8 +158,9 @@ export class TrayPackingOptimizer {
 
       for (let b = batchStart; b < allBatches.length; b++) {
         const batch = allBatches[b];
-        // Batches always start at the top of a column (row 0)
-        const result = this.tryPlaceBatch(batch.size, currentCol, 0, cols, rows);
+        // Apply a 1-cell gap if we're mid-column (not at the start of a fresh column)
+        const startRow = currentRow > 0 ? currentRow + 1 : 0;
+        const result = this.tryPlaceBatch(batch.size, currentCol, startRow, cols, rows);
 
         if (result === null) break; // Batch doesn't fit on the remaining columns
 
@@ -184,11 +185,8 @@ export class TrayPackingOptimizer {
         }
 
         batchEnd = b + 1;
-
-        // The last column this batch used; then skip one full column as a gap
-        const lastUsedCol = nextRow > 0 ? nextCol : nextCol - 1;
-        currentCol = lastUsedCol + 2; // +1 gap column, +1 to land on next batch column
-        currentRow = 0;
+        currentCol = nextCol;
+        currentRow = nextRow;
       }
 
       if (batchEnd === batchStart) {
@@ -271,19 +269,23 @@ export class TrayPackingOptimizer {
         // Entire remaining batch fits in the current column
         segments.push({ row, col, count: remaining });
         row += remaining;
-        if (row >= rows) { col++; row = 0; }
+        if (row >= rows) {
+          // Filled the column exactly — leave a gap column for the next batch
+          col += 2;
+          row = 0;
+        }
         remaining = 0;
       } else if (row === 0) {
         // At the top of a column and batch is larger than the column —
-        // fill the whole column and continue to the next
+        // fill the whole column and continue directly to the next (same batch, no gap)
         segments.push({ row: 0, col, count: rows });
         remaining -= rows;
-        col++;
+        col++;       // no gap: same batch is continuing
         row = 0;
       } else {
         // Mid-column and batch doesn't fit in the remaining slots —
-        // move the entire batch to the top of the next column
-        col++;
+        // skip a gap column and retry at the top of the column after it
+        col += 2;
         row = 0;
         // remaining is unchanged; retry at new column top
       }
