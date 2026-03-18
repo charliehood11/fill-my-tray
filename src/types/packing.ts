@@ -21,8 +21,9 @@ export interface Component {
   w: number;
   d: number;
   name?: string;
-  quantity?: number;
-  priority?: 'low' | 'medium' | 'high' | 'critical'; // Priority categories
+  numBatches?: number;  // Number of batches of this component
+  batchSize?: number;   // Number of parts per batch
+  priority?: 'low' | 'medium' | 'high' | 'critical';
 }
 
 export interface PlacedComponent extends Position {
@@ -30,8 +31,8 @@ export interface PlacedComponent extends Position {
   w: number;
   d: number;
   name?: string;
-  width: number; // Actual width after rotation
-  height: number; // Actual height after rotation
+  width: number; // Actual width after rotation (or cell-spanning width in grid mode)
+  height: number; // Actual height after rotation (or cell height in grid mode)
   rotation: 0 | 90; // 0 = original orientation, 90 = rotated 90 degrees
   priority?: 'low' | 'medium' | 'high' | 'critical';
 }
@@ -50,7 +51,7 @@ export interface PackingResult {
   trayResults: TrayResult[];
   unplacedComponents: Component[];
   totalTraysUsed: number;
-  totalComponentsPlaced: number;
+  totalComponentsPlaced: number;  // batches placed in grid mode, individual parts in precise mode
   averageEfficiency: number;
   recommendations: Component[];
 }
@@ -64,11 +65,11 @@ export interface FreeSpace {
 }
 
 export interface PackingOptions {
-  spacing: number; // Default 100mm between components
-  edgeSpacing: number; // Default 100mm from tray edges
+  spacing: number;
+  edgeSpacing: number;
   allowRotation: boolean;
   optimizationLevel: 'fast' | 'balanced' | 'thorough';
-  packingMode?: 'precise' | 'grid'; // grid = 12×5 cell-based packing
-  gridColumns?: number; // Default 12
-  gridRows?: number; // Default 5
+  packingMode?: 'precise' | 'grid';
+  gridColumns?: number; // Default 12 — columns per flight bar
+  gridRows?: number;   // Default 5  — number of flight bars
 }

@@ -93,10 +93,17 @@ const validateComponents = (data: unknown): Component[] => {
     }
 
     if (
-      component.quantity !== undefined &&
-      (typeof component.quantity !== 'number' || !Number.isFinite(component.quantity) || component.quantity < 0)
+      component.numBatches !== undefined &&
+      (typeof component.numBatches !== 'number' || !Number.isFinite(component.numBatches) || component.numBatches < 0)
     ) {
-      throw new Error(`Component ${index + 1} (${component.id}): "quantity" must be a non-negative number.`);
+      throw new Error(`Component ${index + 1} (${component.id}): "numBatches" must be a non-negative number.`);
+    }
+
+    if (
+      component.batchSize !== undefined &&
+      (typeof component.batchSize !== 'number' || !Number.isFinite(component.batchSize) || component.batchSize <= 0)
+    ) {
+      throw new Error(`Component ${index + 1} (${component.id}): "batchSize" must be a positive number.`);
     }
 
     if (component.priority !== undefined && !allowedPriorities.includes(component.priority)) {
@@ -113,10 +120,10 @@ const TrayPackingOptimizerComponent = () => {
   const [trays, setTrays] = useState<Tray[]>(defaultTrays);
   const [components, setComponents] = useState<Component[]>(defaultComponents);
   const [selectedTray, setSelectedTray] = useState<string>('');
-  const [componentSettings, setComponentSettings] = useState<{[key: string]: {quantity: number, priority: 'low' | 'medium' | 'high' | 'critical'}}>(() => {
-    const initialSettings: {[key: string]: {quantity: number, priority: 'low' | 'medium' | 'high' | 'critical'}} = {};
+  const [componentSettings, setComponentSettings] = useState<{[key: string]: {numBatches: number, batchSize: number, priority: 'low' | 'medium' | 'high' | 'critical'}}>(() => {
+    const initialSettings: {[key: string]: {numBatches: number, batchSize: number, priority: 'low' | 'medium' | 'high' | 'critical'}} = {};
     defaultComponents.forEach(comp => {
-      initialSettings[comp.id] = { quantity: 1, priority: 'medium' };
+      initialSettings[comp.id] = { numBatches: 1, batchSize: 1, priority: 'medium' };
     });
     return initialSettings;
   });
@@ -173,15 +180,19 @@ const TrayPackingOptimizerComponent = () => {
         const data = JSON.parse(e.target?.result as string);
         const componentList = validateComponents(data);
         
-        // Initialize component settings for new data, using quantity from JSON
-        const initialSettings: {[key: string]: {quantity: number, priority: 'low' | 'medium' | 'high' | 'critical'}} = {};
+        // Initialize component settings for new data, using numBatches/batchSize from JSON
+        const initialSettings: {[key: string]: {numBatches: number, batchSize: number, priority: 'low' | 'medium' | 'high' | 'critical'}} = {};
         componentList.forEach(comp => {
-          initialSettings[comp.id] = { quantity: comp.quantity || 1, priority: (comp.priority as 'low' | 'medium' | 'high' | 'critical') || 'medium' };
+          initialSettings[comp.id] = {
+            numBatches: comp.numBatches || 1,
+            batchSize:  comp.batchSize  || 1,
+            priority:   (comp.priority as 'low' | 'medium' | 'high' | 'critical') || 'medium',
+          };
         });
         setComponentSettings(initialSettings);
 
-        // Strip quantity/priority from stored components so they don't get double-applied
-        const cleanedComponents = componentList.map(({ quantity, priority, ...rest }) => rest) as Component[];
+        // Strip batch/priority fields from stored components so they don't get double-applied
+        const cleanedComponents = componentList.map(({ numBatches, batchSize, priority, ...rest }) => rest) as Component[];
         setComponents(cleanedComponents);
       } catch (error) {
         console.error('Error parsing component JSON:', error);
@@ -205,12 +216,22 @@ const TrayPackingOptimizerComponent = () => {
     event.target.value = '';
   };
 
-  const updateComponentQuantity = (componentId: string, quantity: number) => {
+  const updateComponentNumBatches = (componentId: string, numBatches: number) => {
     setComponentSettings(prev => ({
       ...prev,
       [componentId]: {
         ...prev[componentId],
-        quantity: Math.max(0, quantity)
+        numBatches: Math.max(0, numBatches),
+      }
+    }));
+  };
+
+  const updateComponentBatchSize = (componentId: string, batchSize: number) => {
+    setComponentSettings(prev => ({
+      ...prev,
+      [componentId]: {
+        ...prev[componentId],
+        batchSize: Math.max(1, batchSize),
       }
     }));
   };
@@ -229,13 +250,14 @@ const TrayPackingOptimizerComponent = () => {
     const tray = trays.find(t => t.id === selectedTray);
     if (!tray) return;
 
-    // Filter components with quantity > 0 and add settings
+    // Filter components with at least 1 batch and add settings
     const selectedComponents = components
-      .filter(comp => (componentSettings[comp.id]?.quantity || 0) > 0)
+      .filter(comp => (componentSettings[comp.id]?.numBatches || 0) > 0)
       .map(comp => ({
         ...comp,
-        quantity: componentSettings[comp.id]?.quantity || 1,
-        priority: componentSettings[comp.id]?.priority || 'medium'
+        numBatches: componentSettings[comp.id]?.numBatches || 1,
+        batchSize:  componentSettings[comp.id]?.batchSize  || 1,
+        priority:   componentSettings[comp.id]?.priority   || 'medium',
       }));
 
     if (selectedComponents.length === 0) return;
@@ -346,7 +368,7 @@ const TrayPackingOptimizerComponent = () => {
                       className="cursor-pointer"
                     />
                     <div className="text-sm text-gray-600">
-                      Expected format: <code>[{`{"id": "comp1", "w": 200, "d": 150, "quantity": 5}`}]</code>
+                      Expected format: <code>[{`{"id": "comp1", "w": 200, "d": 150, "numBatches": 3, "batchSize": 12}`}]</code>
                     </div>
                     {components.length > 0 && (
                       <div className="space-y-2">
@@ -403,35 +425,59 @@ const TrayPackingOptimizerComponent = () => {
                       <div key={comp.id} className="p-3 border rounded-lg space-y-3">
                         <div className="font-medium">{comp.name || comp.id} ({comp.w}×{comp.d}mm)</div>
                         
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <Label className="text-sm">Quantity:</Label>
+                        <div className="flex flex-wrap items-center gap-4">
+                          {/* Number of batches */}
+                          <div className="flex items-center gap-1">
+                            <Label className="text-sm whitespace-nowrap">Batches:</Label>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => updateComponentQuantity(comp.id, (componentSettings[comp.id]?.quantity || 1) - 1)}
+                              data-testid={`button-dec-batches-${comp.id}`}
+                              onClick={() => updateComponentNumBatches(comp.id, (componentSettings[comp.id]?.numBatches ?? 1) - 1)}
                             >
                               <Minus className="w-3 h-3" />
                             </Button>
-                            <span className="w-8 text-center">{componentSettings[comp.id]?.quantity || 1}</span>
+                            <span className="w-8 text-center" data-testid={`text-batches-${comp.id}`}>
+                              {componentSettings[comp.id]?.numBatches ?? 1}
+                            </span>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => updateComponentQuantity(comp.id, (componentSettings[comp.id]?.quantity || 1) + 1)}
+                              data-testid={`button-inc-batches-${comp.id}`}
+                              onClick={() => updateComponentNumBatches(comp.id, (componentSettings[comp.id]?.numBatches ?? 1) + 1)}
                             >
                               <Plus className="w-3 h-3" />
                             </Button>
                           </div>
-                          
+
+                          {/* Parts per batch */}
+                          <div className="flex items-center gap-1">
+                            <Label className="text-sm whitespace-nowrap">Batch size:</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              className="w-20 h-8 text-sm"
+                              data-testid={`input-batchsize-${comp.id}`}
+                              value={componentSettings[comp.id]?.batchSize ?? 1}
+                              onChange={(e) => updateComponentBatchSize(comp.id, Number(e.target.value))}
+                            />
+                          </div>
+
+                          {/* Total parts indicator */}
+                          <span className="text-xs text-gray-500">
+                            = {(componentSettings[comp.id]?.numBatches ?? 1) * (componentSettings[comp.id]?.batchSize ?? 1)} parts
+                          </span>
+
+                          {/* Priority */}
                           <div className="flex items-center gap-2">
                             <Label className="text-sm">Priority:</Label>
                             <Select
                               value={componentSettings[comp.id]?.priority || 'medium'}
-                              onValueChange={(value: 'low' | 'medium' | 'high' | 'critical') => 
+                              onValueChange={(value: 'low' | 'medium' | 'high' | 'critical') =>
                                 updateComponentPriority(comp.id, value)
                               }
                             >
-                              <SelectTrigger className="w-32">
+                              <SelectTrigger className="w-28">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -527,17 +573,19 @@ const TrayPackingOptimizerComponent = () => {
                 </div>
 
                 {(() => {
-                  const totalParts = components.reduce((sum, comp) => sum + (componentSettings[comp.id]?.quantity || 0), 0);
-                  return totalParts > 0 ? (
+                  const activeComponents = components.filter(c => (componentSettings[c.id]?.numBatches || 0) > 0);
+                  const totalBatches = activeComponents.reduce((sum, c) => sum + (componentSettings[c.id]?.numBatches || 0), 0);
+                  const totalParts   = activeComponents.reduce((sum, c) => sum + (componentSettings[c.id]?.numBatches || 0) * (componentSettings[c.id]?.batchSize || 1), 0);
+                  return totalBatches > 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      Total parts to pack: <strong>{totalParts.toLocaleString()}</strong> ({components.filter(c => (componentSettings[c.id]?.quantity || 0) > 0).length} unique types)
+                      To pack: <strong>{totalBatches} {totalBatches === 1 ? 'batch' : 'batches'}</strong> ({totalParts.toLocaleString()} total parts, {activeComponents.length} unique types)
                     </p>
                   ) : null;
                 })()}
 
-                <Button 
+                <Button
                   onClick={runOptimization}
-                  disabled={!selectedTray || components.filter(comp => (componentSettings[comp.id]?.quantity || 0) > 0).length === 0}
+                  disabled={!selectedTray || components.filter(comp => (componentSettings[comp.id]?.numBatches || 0) > 0).length === 0}
                   className="w-full"
                 >
                   Run Optimization
@@ -563,7 +611,7 @@ const TrayPackingOptimizerComponent = () => {
                       <h3 className="font-semibold text-2xl text-green-600">
                         {results.totalComponentsPlaced}
                       </h3>
-                      <p className="text-gray-600">Components Placed</p>
+                      <p className="text-gray-600">{packingMode === 'grid' ? 'Batches Placed' : 'Components Placed'}</p>
                     </CardContent>
                   </Card>
                   <Card>
