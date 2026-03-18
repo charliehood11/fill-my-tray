@@ -185,6 +185,15 @@ export class TrayPackingOptimizer {
         currentRow = nextRow;
         currentCol = nextCol;
         batchEnd = b + 1;
+
+        // Leave a 1-cell gap between batches on the same flight bar
+        if (currentCol > 0) {
+          currentCol++;
+          if (currentCol >= cols) {
+            currentRow++;
+            currentCol = 0;
+          }
+        }
       }
 
       if (batchEnd === batchStart) {
