@@ -158,9 +158,10 @@ export class TrayPackingOptimizer {
 
       for (let b = batchStart; b < allBatches.length; b++) {
         const batch = allBatches[b];
-        const result = this.tryPlaceBatch(batch.size, currentRow, currentCol, cols, rows);
+        // Batches always start at the top of a column (row 0)
+        const result = this.tryPlaceBatch(batch.size, currentCol, 0, cols, rows);
 
-        if (result === null) break; // Batch doesn't fit on the remaining rows
+        if (result === null) break; // Batch doesn't fit on the remaining columns
 
         const { segments, nextRow, nextCol } = result;
         const multi = segments.length > 1;
@@ -169,31 +170,25 @@ export class TrayPackingOptimizer {
         for (let s = 0; s < segments.length; s++) {
           const seg = segments[s];
           placedComponents.push({
-            id:       multi ? `${batch.compId}_b${batch.batchIdx}_r${s}` : `${batch.compId}_b${batch.batchIdx}`,
+            id:       multi ? `${batch.compId}_b${batch.batchIdx}_c${s}` : `${batch.compId}_b${batch.batchIdx}`,
             w:        batch.w,
             d:        batch.d,
             name:     label,
             priority: batch.priority,
             x:        seg.col * cellW,
             y:        seg.row * cellH,
-            width:    seg.count * cellW,
-            height:   cellH,
+            width:    cellW,               // one column wide
+            height:   seg.count * cellH,   // spans vertically down the column
             rotation: 0,
           });
         }
 
-        currentRow = nextRow;
-        currentCol = nextCol;
         batchEnd = b + 1;
 
-        // Leave a 1-cell gap between batches on the same flight bar
-        if (currentCol > 0) {
-          currentCol++;
-          if (currentCol >= cols) {
-            currentRow++;
-            currentCol = 0;
-          }
-        }
+        // The last column this batch used; then skip one full column as a gap
+        const lastUsedCol = nextRow > 0 ? nextCol : nextCol - 1;
+        currentCol = lastUsedCol + 2; // +1 gap column, +1 to land on next batch column
+        currentRow = 0;
       }
 
       if (batchEnd === batchStart) {
@@ -246,47 +241,51 @@ export class TrayPackingOptimizer {
   }
 
   /**
-   * Try to place a single batch of `size` parts starting at (startRow, startCol).
+   * Try to place a single batch of `size` parts starting at (startCol, startRow).
+   *
+   * Parts are packed VERTICALLY — filling top-to-bottom down a column before
+   * moving to the next column. A batch may span multiple columns only when it
+   * completely fills the first column it occupies.
    *
    * Returns null if the batch cannot fit on the current tray.
-   * Otherwise returns the list of row-segments and the next free position.
+   * Otherwise returns the list of column-segments and the next free position.
    */
   private tryPlaceBatch(
     size: number,
-    startRow: number,
     startCol: number,
+    startRow: number,
     cols: number,
     rows: number,
   ): PlacementResult | null {
     let remaining = size;
-    let row = startRow;
     let col = startCol;
+    let row = startRow;
     const segments: BatchSegment[] = [];
 
     while (remaining > 0) {
-      if (row >= rows) return null; // Reached end of tray
+      if (col >= cols) return null; // Reached end of tray (no more columns)
 
-      const availInRow = cols - col;
+      const availInCol = rows - row;
 
-      if (remaining <= availInRow) {
-        // Entire remaining batch fits in this row
+      if (remaining <= availInCol) {
+        // Entire remaining batch fits in the current column
         segments.push({ row, col, count: remaining });
-        col += remaining;
-        if (col >= cols) { row++; col = 0; }
+        row += remaining;
+        if (row >= rows) { col++; row = 0; }
         remaining = 0;
-      } else if (col === 0) {
-        // At the start of a row and batch is larger than a full row —
-        // fill the whole row and continue to the next
-        segments.push({ row, col: 0, count: cols });
-        remaining -= cols;
-        row++;
-        col = 0;
+      } else if (row === 0) {
+        // At the top of a column and batch is larger than the column —
+        // fill the whole column and continue to the next
+        segments.push({ row: 0, col, count: rows });
+        remaining -= rows;
+        col++;
+        row = 0;
       } else {
-        // Mid-row and batch doesn't fit in the remaining slots —
-        // move the entire batch to the start of the next flight bar
-        row++;
-        col = 0;
-        // remaining is unchanged; retry at new row start
+        // Mid-column and batch doesn't fit in the remaining slots —
+        // move the entire batch to the top of the next column
+        col++;
+        row = 0;
+        // remaining is unchanged; retry at new column top
       }
     }
 
