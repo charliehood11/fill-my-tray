@@ -165,23 +165,26 @@ export class TrayPackingOptimizer {
         if (result === null) break; // Batch doesn't fit on the remaining columns
 
         const { segments, nextRow, nextCol } = result;
-        const multi = segments.length > 1;
         const label = `${batch.compName || batch.compId} (B${batch.batchIdx + 1})`;
 
+        // Place each individual part as its own cell
+        let partIdx = 0;
         for (let s = 0; s < segments.length; s++) {
           const seg = segments[s];
-          placedComponents.push({
-            id:       multi ? `${batch.compId}_b${batch.batchIdx}_c${s}` : `${batch.compId}_b${batch.batchIdx}`,
-            w:        batch.w,
-            d:        batch.d,
-            name:     label,
-            priority: batch.priority,
-            x:        seg.col * cellW,
-            y:        seg.row * cellH,
-            width:    cellW,               // one column wide
-            height:   seg.count * cellH,   // spans vertically down the column
-            rotation: 0,
-          });
+          for (let p = 0; p < seg.count; p++) {
+            placedComponents.push({
+              id:       `${batch.compId}_b${batch.batchIdx}_p${partIdx++}`,
+              w:        batch.w,
+              d:        batch.d,
+              name:     label,
+              priority: batch.priority,
+              x:        seg.col * cellW,
+              y:        (seg.row + p) * cellH,
+              width:    cellW,
+              height:   cellH,
+              rotation: 0,
+            });
+          }
         }
 
         batchEnd = b + 1;
