@@ -33,7 +33,7 @@ export interface PlacedComponent extends Position {
   name?: string;
   width: number; // Actual width after rotation (or cell-spanning width in grid mode)
   height: number; // Actual height after rotation (or cell height in grid mode)
-  rotation: 0 | 90; // 0 = original orientation, 90 = rotated 90 degrees
+  rotation: 0 | 45 | 90; // 0 = original, 45 = diagonal, 90 = rotated
   priority?: 'low' | 'medium' | 'high' | 'critical';
 }
 
@@ -51,7 +51,7 @@ export interface PackingResult {
   trayResults: TrayResult[];
   unplacedComponents: Component[];
   totalTraysUsed: number;
-  totalComponentsPlaced: number;  // batches placed in grid mode, individual parts in precise mode
+  totalComponentsPlaced: number;  // batches placed in grid mode, individual parts in precise/diagonal mode
   averageEfficiency: number;
   recommendations: Component[];
 }
@@ -69,7 +69,10 @@ export interface PackingOptions {
   edgeSpacing: number;
   allowRotation: boolean;
   optimizationLevel: 'fast' | 'balanced' | 'thorough';
-  packingMode?: 'precise' | 'grid';
+  packingMode?: 'precise' | 'grid' | 'diagonal';
   gridColumns?: number; // Default 12 — columns per flight bar
   gridRows?: number;   // Default 5  — number of flight bars
+  randomize?: boolean;          // Diagonal mode: randomise part order
+  diagonalMinPerBar?: number;   // Diagonal mode: min parts per flight bar (default 1)
+  diagonalMaxPerBar?: number;   // Diagonal mode: max parts per flight bar (default 4)
 }

@@ -35,9 +35,12 @@ export class TrayPackingOptimizer {
   private edgeSpacing: number;
   private allowRotation: boolean;
   private optimizationLevel: string;
-  private packingMode: 'precise' | 'grid';
+  private packingMode: 'precise' | 'grid' | 'diagonal';
   private gridColumns: number;
   private gridRows: number;
+  private randomize: boolean;
+  private diagonalMinPerBar: number;
+  private diagonalMaxPerBar: number;
 
   constructor(options: PackingOptions) {
     this.spacing = options.spacing;
@@ -47,6 +50,9 @@ export class TrayPackingOptimizer {
     this.packingMode = options.packingMode || 'precise';
     this.gridColumns = options.gridColumns || 12;
     this.gridRows = options.gridRows || 5;
+    this.randomize = options.randomize ?? false;
+    this.diagonalMinPerBar = options.diagonalMinPerBar ?? 1;
+    this.diagonalMaxPerBar = options.diagonalMaxPerBar ?? 4;
   }
 
   // Main packing function
@@ -54,6 +60,11 @@ export class TrayPackingOptimizer {
     if (this.packingMode === 'grid') {
       // Grid mode: batch-aware flight-bar packing
       return this.gridPackBatches(tray, components);
+    }
+
+    if (this.packingMode === 'diagonal') {
+      // Diagonal mode: 45° placement, randomisable, min–max per flight bar
+      return this.diagonalPack(tray, components);
     }
 
     // Precise mode: expand by numBatches × batchSize and place individually
@@ -236,6 +247,170 @@ export class TrayPackingOptimizer {
       unplacedComponents:    unplacedBatches,
       totalTraysUsed:        trayResults.length,
       totalComponentsPlaced: batchesPlaced,
+      averageEfficiency:     avgEfficiency,
+      recommendations:       [],
+    };
+  }
+
+  // ─── Diagonal (45°) Packing ─────────────────────────────────────────────────
+
+  /**
+   * Pack individual parts at 45° in horizontal flight bars.
+   *
+   * Rules:
+   *  • Each part is oriented at 45°; its bounding box becomes a square of
+   *    side = (longSide + shortSide) / √2.  The long dimension is kept in
+   *    the left-right direction before rotation.
+   *  • Parts are grouped into flight bars (rows).  Each bar gets a random
+   *    number of parts between diagonalMinPerBar and diagonalMaxPerBar.
+   *  • When randomize is true, part order is shuffled and bar count is random;
+   *    otherwise parts keep their original order and bars use the maximum count.
+   *  • Bars are placed top-to-bottom in the tray.
+   */
+  private diagonalPack(tray: Tray, components: Component[]): PackingResult {
+    const SQRT2 = Math.SQRT2;
+
+    // Expand every component's batches into individual parts
+    interface DiagPart {
+      id: string;
+      name: string;
+      w: number;  // long side (ensured >= d)
+      d: number;  // short side
+      priority?: Component['priority'];
+    }
+
+    const parts: DiagPart[] = [];
+    for (const comp of components) {
+      const numBatches = Math.max(1, Math.round(Number(comp.numBatches) || 1));
+      const batchSize  = Math.max(1, Math.round(Number(comp.batchSize)  || 1));
+      const label      = comp.name || comp.id;
+      // Ensure w is the long side (long side spanning left-to-right)
+      const longSide  = Math.max(comp.w, comp.d);
+      const shortSide = Math.min(comp.w, comp.d);
+      for (let b = 0; b < numBatches; b++) {
+        for (let p = 0; p < batchSize; p++) {
+          parts.push({
+            id:       `${comp.id}_b${b}_p${p}`,
+            name:     label,
+            w:        longSide,
+            d:        shortSide,
+            priority: comp.priority,
+          });
+        }
+      }
+    }
+
+    // Fisher-Yates shuffle when randomise is on
+    if (this.randomize) {
+      for (let i = parts.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [parts[i], parts[j]] = [parts[j], parts[i]];
+      }
+    }
+
+    const minPer = Math.max(1, this.diagonalMinPerBar);
+    const maxPer = Math.max(minPer, this.diagonalMaxPerBar);
+
+    const trayResults: TrayResult[] = [];
+    let partStart = 0;
+    let trayNumber = 1;
+
+    while (partStart < parts.length) {
+      const placedComponents: PlacedComponent[] = [];
+      let currentY = 0;
+      let partEnd  = partStart;
+      let idx      = partStart;
+
+      while (idx < parts.length) {
+        // Decide how many parts go in this flight bar
+        const remaining  = parts.length - idx;
+        const barCount   = this.randomize
+          ? Math.floor(Math.random() * (Math.min(maxPer, remaining) - minPer + 1)) + minPer
+          : Math.min(maxPer, remaining);
+
+        const barParts = parts.slice(idx, idx + barCount);
+
+        // Flight bar height = largest bounding-box side among parts in the bar
+        const barH = Math.max(...barParts.map(p => (p.w + p.d) / SQRT2));
+
+        // Stop if the bar doesn't fit vertically in the remaining tray space
+        if (currentY + barH > tray.depth) break;
+
+        // Try to place parts left-to-right within the bar
+        let currentX  = 0;
+        let allFit    = true;
+        const tempPlaced: PlacedComponent[] = [];
+
+        for (const part of barParts) {
+          const bbox = (part.w + part.d) / SQRT2;
+          if (currentX + bbox > tray.width) {
+            allFit = false;
+            break;
+          }
+          tempPlaced.push({
+            id:       part.id,
+            name:     part.name,
+            w:        part.w,
+            d:        part.d,
+            priority: part.priority,
+            x:        currentX,
+            y:        currentY,
+            width:    bbox,    // bounding-box width
+            height:   barH,    // use uniform bar height so parts align
+            rotation: 45,
+          });
+          currentX += bbox;
+        }
+
+        if (!allFit) break; // This bar can't even fit its parts → move to next tray
+
+        placedComponents.push(...tempPlaced);
+        idx      += barCount;
+        partEnd   = idx;
+        currentY += barH;
+      }
+
+      if (partEnd === partStart) {
+        // No single part can fit — skip to avoid infinite loop
+        partStart++;
+        continue;
+      }
+
+      const totalArea = tray.width * tray.depth;
+      // Use actual part area (w × d) for efficiency, not bounding box
+      const usedArea  = placedComponents.reduce((sum, c) => sum + c.w * c.d, 0);
+
+      trayResults.push({
+        tray: { ...tray, id: `${tray.id}_${trayNumber}` },
+        trayNumber,
+        placedComponents,
+        totalArea,
+        usedArea,
+        efficiency: (usedArea / totalArea) * 100,
+        remainingSpace: [],
+      });
+
+      partStart = partEnd;
+      trayNumber++;
+    }
+
+    const unplacedComponents: Component[] = parts.slice(partStart).map(p => ({
+      id: p.id,
+      w:  p.w,
+      d:  p.d,
+      name: p.name,
+    }));
+
+    const totalPlaced = trayResults.reduce((sum, r) => sum + r.placedComponents.length, 0);
+    const avgEfficiency = trayResults.length > 0
+      ? trayResults.reduce((sum, r) => sum + r.efficiency, 0) / trayResults.length
+      : 0;
+
+    return {
+      trayResults,
+      unplacedComponents,
+      totalTraysUsed:        trayResults.length,
+      totalComponentsPlaced: totalPlaced,
       averageEfficiency:     avgEfficiency,
       recommendations:       [],
     };

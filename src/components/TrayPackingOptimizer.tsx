@@ -16,7 +16,8 @@ import { toast } from '@/hooks/use-toast';
 const defaultTrays: Tray[] = [
   {"id":"tray01","width":2000,"depth":2100},
   {"id":"tray02","width":3400,"depth":1000},
-  {"id":"pfd_tray","name":"PFD tray","width":2700,"depth":1070}
+  {"id":"pfd_tray","name":"PFD tray","width":2700,"depth":1070},
+  {"id":"s03_fb","name":"S03 FB","width":2500,"depth":1200}
 ];
 
 const defaultComponents: Component[] = [
@@ -131,9 +132,12 @@ const TrayPackingOptimizerComponent = () => {
   const [spacing, setSpacing] = useState(100);
   const [edgeSpacing, setEdgeSpacing] = useState(100);
   const [allowRotation, setAllowRotation] = useState(true);
-  const [packingMode, setPackingMode] = useState<'precise' | 'grid'>('precise');
+  const [packingMode, setPackingMode] = useState<'precise' | 'grid' | 'diagonal'>('precise');
   const [gridColumns, setGridColumns] = useState(12);
   const [gridRows, setGridRows] = useState(5);
+  const [randomize, setRandomize] = useState(false);
+  const [diagonalMinPerBar, setDiagonalMinPerBar] = useState(1);
+  const [diagonalMaxPerBar, setDiagonalMaxPerBar] = useState(4);
 
   const handleTrayUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -270,6 +274,9 @@ const TrayPackingOptimizerComponent = () => {
       packingMode,
       gridColumns,
       gridRows,
+      randomize,
+      diagonalMinPerBar,
+      diagonalMaxPerBar,
     });
 
     const result = optimizer.packTray(tray, selectedComponents);
@@ -540,7 +547,7 @@ const TrayPackingOptimizerComponent = () => {
 
                 <div className="border-t pt-4 space-y-3">
                   <Label className="font-semibold">Packing Mode</Label>
-                  <div className="flex gap-4">
+                  <div className="flex flex-wrap gap-4">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="radio" name="packingMode" value="precise"
                         checked={packingMode === 'precise'}
@@ -553,7 +560,14 @@ const TrayPackingOptimizerComponent = () => {
                         onChange={() => setPackingMode('grid')} />
                       <span className="text-sm">Grid (fast, 1000s of parts)</span>
                     </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="packingMode" value="diagonal"
+                        checked={packingMode === 'diagonal'}
+                        onChange={() => setPackingMode('diagonal')} />
+                      <span className="text-sm">Diagonal 45° — S03 FB</span>
+                    </label>
                   </div>
+
                   {packingMode === 'grid' && (
                     <div className="grid grid-cols-2 gap-4 pl-4">
                       <div>
@@ -567,6 +581,41 @@ const TrayPackingOptimizerComponent = () => {
                         <Input id="gridRows" type="number" value={gridRows}
                           onChange={(e) => setGridRows(Math.max(1, Number(e.target.value)))}
                           min="1" max="50" />
+                      </div>
+                    </div>
+                  )}
+
+                  {packingMode === 'diagonal' && (
+                    <div className="space-y-3 pl-4 border-l-2 border-indigo-200">
+                      <p className="text-sm text-muted-foreground">
+                        Parts are placed at 45° with their long side spanning left-to-right,
+                        grouped into horizontal flight bars.
+                      </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="diagMin">Min parts per flight bar</Label>
+                          <Input id="diagMin" type="number" value={diagonalMinPerBar}
+                            onChange={(e) => setDiagonalMinPerBar(Math.max(1, Number(e.target.value)))}
+                            min="1" max="10" />
+                        </div>
+                        <div>
+                          <Label htmlFor="diagMax">Max parts per flight bar</Label>
+                          <Input id="diagMax" type="number" value={diagonalMaxPerBar}
+                            onChange={(e) => setDiagonalMaxPerBar(Math.max(diagonalMinPerBar, Number(e.target.value)))}
+                            min="1" max="20" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="randomize"
+                          checked={randomize}
+                          onChange={(e) => setRandomize(e.target.checked)}
+                          data-testid="checkbox-randomize"
+                        />
+                        <Label htmlFor="randomize" className="cursor-pointer">
+                          Randomise part order and flight bar count
+                        </Label>
                       </div>
                     </div>
                   )}
@@ -638,7 +687,7 @@ const TrayPackingOptimizerComponent = () => {
                       <CardTitle>Tray {trayResult.trayNumber} — {trayResult.tray.name || trayResult.tray.id.split('_')[0]} ({trayResult.efficiency.toFixed(1)}% efficiency, {trayResult.placedComponents.length} components)</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <TrayVisualization result={trayResult} gridColumns={packingMode === 'grid' ? gridColumns : undefined} gridRows={packingMode === 'grid' ? gridRows : undefined} />
+                      <TrayVisualization result={trayResult} gridColumns={packingMode === 'grid' ? gridColumns : undefined} gridRows={packingMode === 'grid' ? gridRows : undefined} packingMode={packingMode} />
                       <div className="grid md:grid-cols-2 gap-4 mt-4">
                         {trayResult.placedComponents.map((comp, index) => (
                           <div key={index} className="p-3 border rounded-lg">
