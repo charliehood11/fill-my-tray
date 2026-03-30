@@ -33,7 +33,7 @@ export interface PlacedComponent extends Position {
   name?: string;
   width: number; // Actual width after rotation (or cell-spanning width in grid mode)
   height: number; // Actual height after rotation (or cell height in grid mode)
-  rotation: 0 | 45 | 90; // 0 = original, 45 = diagonal, 90 = rotated
+  rotation: number; // degrees: 0 = original orientation, 90 = rotated 90°, any value for diagonal mode
   priority?: 'low' | 'medium' | 'high' | 'critical';
 }
 

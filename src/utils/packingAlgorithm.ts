@@ -268,7 +268,20 @@ export class TrayPackingOptimizer {
    *  • Bars are placed top-to-bottom in the tray.
    */
   private diagonalPack(tray: Tray, components: Component[]): PackingResult {
-    const SQRT2 = Math.SQRT2;
+
+    // Candidate angles from vertical (0° = part standing vertical, 45° = diagonal)
+    // At angle θ from vertical, for a w×d rectangle (w = long side):
+    //   bboxW = w·sin(θ) + d·cos(θ)   ← horizontal footprint in the flight bar
+    //   bboxH = w·cos(θ) + d·sin(θ)   ← bar height contribution
+    const CANDIDATE_ANGLES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45]; // degrees from vertical
+
+    const bbox = (w: number, d: number, thetaDeg: number) => {
+      const r = thetaDeg * Math.PI / 180;
+      return {
+        bboxW: w * Math.sin(r) + d * Math.cos(r),
+        bboxH: w * Math.cos(r) + d * Math.sin(r),
+      };
+    };
 
     // Expand every component's batches into individual parts
     interface DiagPart {
@@ -284,7 +297,6 @@ export class TrayPackingOptimizer {
       const numBatches = Math.max(1, Math.round(Number(comp.numBatches) || 1));
       const batchSize  = Math.max(1, Math.round(Number(comp.batchSize)  || 1));
       const label      = comp.name || comp.id;
-      // Ensure w is the long side (long side spanning left-to-right)
       const longSide  = Math.max(comp.w, comp.d);
       const shortSide = Math.min(comp.w, comp.d);
       for (let b = 0; b < numBatches; b++) {
@@ -311,6 +323,46 @@ export class TrayPackingOptimizer {
     const minPer = Math.max(1, this.diagonalMinPerBar);
     const maxPer = Math.max(minPer, this.diagonalMaxPerBar);
 
+    // For a given set of parts and starting position, find the angle that fits
+    // the most parts in a single flight bar. Tie-breaks on smallest bar height.
+    const findBestBar = (
+      fromIdx: number,
+      wantCount: number,
+      currentY: number,
+    ): { count: number; angleDeg: number; barH: number } => {
+      let bestCount = 0;
+      let bestAngle = 45;
+      let bestBarH  = Infinity;
+
+      for (const angleDeg of CANDIDATE_ANGLES) {
+        let x    = 0;
+        let barH = 0;
+        let cnt  = 0;
+
+        for (let i = fromIdx; i < Math.min(fromIdx + wantCount, parts.length); i++) {
+          const p = parts[i];
+          const { bboxW, bboxH } = bbox(p.w, p.d, angleDeg);
+          const newBarH = Math.max(barH, bboxH);
+
+          // Stop if this part would exceed tray width or push bar out of tray depth
+          if (x + bboxW > tray.width)         break;
+          if (currentY + newBarH > tray.depth) break;
+
+          x    += bboxW;
+          barH  = newBarH;
+          cnt++;
+        }
+
+        if (cnt > bestCount || (cnt === bestCount && barH < bestBarH && cnt > 0)) {
+          bestCount = cnt;
+          bestAngle = angleDeg;
+          bestBarH  = barH;
+        }
+      }
+
+      return { count: bestCount, angleDeg: bestAngle, barH: bestBarH };
+    };
+
     const trayResults: TrayResult[] = [];
     const skippedParts: DiagPart[] = [];   // parts genuinely too large for the tray
     let partStart = 0;
@@ -323,68 +375,51 @@ export class TrayPackingOptimizer {
       let idx      = partStart;
 
       while (idx < parts.length) {
-        // Decide the initial target count for this flight bar
+        // Desired count for this flight bar (random or max)
         const remaining = parts.length - idx;
-        let targetCount = this.randomize
+        const wantCount = this.randomize
           ? Math.floor(Math.random() * (Math.min(maxPer, remaining) - minPer + 1)) + minPer
           : Math.min(maxPer, remaining);
 
-        // Try targetCount; if parts don't fit horizontally, reduce by 1 and retry
-        // (down to 1). This ensures parts are never silently skipped due to a
-        // random count that exceeds the physical tray width.
+        // Find the best angle + count, trying from wantCount down to 1
         let placed = false;
-        while (targetCount >= 1) {
-          const barParts = parts.slice(idx, idx + targetCount);
+        for (let tryCount = wantCount; tryCount >= 1; tryCount--) {
+          const best = findBestBar(idx, tryCount, currentY);
+          if (best.count < tryCount) continue; // couldn't fit all tryCount parts — reduce
 
-          // Flight bar height = largest bounding-box among these parts
-          const barH = Math.max(...barParts.map(p => (p.w + p.d) / SQRT2));
-
-          // If the bar doesn't fit vertically, try with fewer parts (may reduce barH)
-          if (currentY + barH > tray.depth) {
-            targetCount--;
-            continue;
-          }
-
-          // Try to place parts left-to-right
-          let currentX = 0;
-          let allFit   = true;
+          // Build the placed parts using the chosen angle
           const tempPlaced: PlacedComponent[] = [];
+          let x = 0;
 
-          for (const part of barParts) {
-            const bbox = (part.w + part.d) / SQRT2;
-            if (currentX + bbox > tray.width) {
-              allFit = false;
-              break;
-            }
+          for (let i = idx; i < idx + best.count; i++) {
+            const p = parts[i];
+            const { bboxW } = bbox(p.w, p.d, best.angleDeg);
+            // SVG rotation: 90° - angleDeg  (0°from-vertical → rotate 90°, 45° → rotate 45°)
+            const svgRotation = 90 - best.angleDeg;
             tempPlaced.push({
-              id:       part.id,
-              name:     part.name,
-              w:        part.w,
-              d:        part.d,
-              priority: part.priority,
-              x:        currentX,
+              id:       p.id,
+              name:     p.name,
+              w:        p.w,
+              d:        p.d,
+              priority: p.priority,
+              x,
               y:        currentY,
-              width:    bbox,
-              height:   barH,
-              rotation: 45,
+              width:    bboxW,
+              height:   best.barH,
+              rotation: svgRotation,
             });
-            currentX += bbox;
+            x += bboxW;
           }
 
-          if (allFit) {
-            placedComponents.push(...tempPlaced);
-            idx      += targetCount;
-            partEnd   = idx;
-            currentY += barH;
-            placed    = true;
-            break;
-          }
-
-          // Doesn't fit — try one fewer part
-          targetCount--;
+          placedComponents.push(...tempPlaced);
+          idx      += best.count;
+          partEnd   = idx;
+          currentY += best.barH;
+          placed    = true;
+          break;
         }
 
-        // If even 1 part can't fit horizontally or vertically, stop filling this tray
+        // If even 1 part can't fit, this tray is full — start a new one
         if (!placed) break;
       }
 

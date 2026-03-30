@@ -36,7 +36,6 @@ const TrayVisualization: React.FC<TrayVisualizationProps> = ({
     const lines = [];
     const cellW = scaledTrayWidth / gridColumns;
     const cellH = scaledTrayDepth / gridRows;
-
     for (let c = 1; c < gridColumns; c++) {
       lines.push(
         <line key={`col-${c}`} x1={10 + c * cellW} y1={10} x2={10 + c * cellW} y2={10 + scaledTrayDepth}
@@ -53,28 +52,36 @@ const TrayVisualization: React.FC<TrayVisualizationProps> = ({
   };
 
   const renderComponent = (component: TrayResult['placedComponents'][0], index: number) => {
-    const color = getPriorityColor(component.priority);
-    const label = component.name || component.id.split('_')[0];
+    const color     = getPriorityColor(component.priority);
+    const label     = component.name || component.id.split('_')[0];
+    const rot       = component.rotation;
 
-    if (component.rotation === 45) {
-      // Draw actual rotated diamond: the rect is w×d, rotated 45° around the
-      // centre of its bounding box so the long side spans left-to-right.
-      const bboxX = component.x * scale + 10;
-      const bboxY = component.y * scale + 10;
-      const bboxW = component.width  * scale;
-      const bboxH = component.height * scale;
-      const cx = bboxX + bboxW / 2;
-      const cy = bboxY + bboxH / 2;
-      const scaledW = component.w * scale;
-      const scaledD = component.d * scale;
+    // Diagonal mode: any rotation strictly between 0° and 90° — draw the actual
+    // w×d part shape rotated within its bounding box.
+    // At 0° from vertical (SVG rot=90) the part is truly vertical and renders
+    // as a plain rect, so the "else" branch below handles that correctly too.
+    const isDiagonal = rot > 0 && rot < 90;
+
+    if (isDiagonal) {
+      const bboxX  = component.x * scale + 10;
+      const bboxY  = component.y * scale + 10;
+      const bboxW  = component.width  * scale;
+      const bboxH  = component.height * scale;
+      const cx     = bboxX + bboxW / 2;
+      const cy     = bboxY + bboxH / 2;
+      const scaledW = component.w * scale; // long side
+      const scaledD = component.d * scale; // short side
+
+      // angleDeg from vertical = 90 - svgRotation
+      const angleDeg = 90 - rot;
 
       return (
         <g key={index}>
-          {/* Bounding-box outline (faint guide) */}
+          {/* Faint bounding-box guide */}
           <rect x={bboxX} y={bboxY} width={bboxW} height={bboxH}
-            fill="none" stroke={color} strokeWidth="0.5" strokeDasharray="3,2" opacity="0.4" />
-          {/* Actual part rotated 45° around its centre */}
-          <g transform={`rotate(45, ${cx}, ${cy})`}>
+            fill="none" stroke={color} strokeWidth="0.5" strokeDasharray="3,2" opacity="0.35" />
+          {/* Actual part: draw rect centred at (cx,cy), rotated svgRot degrees */}
+          <g transform={`rotate(${rot}, ${cx}, ${cy})`}>
             <rect
               x={cx - scaledW / 2}
               y={cy - scaledD / 2}
@@ -87,23 +94,24 @@ const TrayVisualization: React.FC<TrayVisualizationProps> = ({
               rx="1"
             />
           </g>
-          {/* Label stays upright at bounding-box centre */}
+          {/* Upright label at bbox centre */}
           <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
             className="fill-white font-semibold" fontSize="7" style={{ pointerEvents: 'none' }}>
             {label}
           </text>
           <title>
-            {label}{'\n'}Position: ({component.x.toFixed(0)}, {component.y.toFixed(0)})mm
-            {'\n'}Size: {component.w}×{component.d}mm @ 45°
+            {label}{'\n'}
+            Position: ({component.x.toFixed(0)}, {component.y.toFixed(0)})mm{'\n'}
+            Size: {component.w}×{component.d}mm @ {angleDeg.toFixed(0)}° from vertical
             {component.priority ? `\nPriority: ${component.priority}` : ''}
           </title>
         </g>
       );
     }
 
-    // Standard 0° / 90° rendering
-    const scaledX = component.x * scale + 10;
-    const scaledY = component.y * scale + 10;
+    // Standard axis-aligned rendering (precise / grid mode, or 0° / 90° diagonal)
+    const scaledX = component.x      * scale + 10;
+    const scaledY = component.y      * scale + 10;
     const scaledWidth  = component.width  * scale;
     const scaledHeight = component.height * scale;
 
@@ -116,14 +124,14 @@ const TrayVisualization: React.FC<TrayVisualizationProps> = ({
           className="fill-white font-semibold" fontSize="8">
           {label}
         </text>
-        {component.rotation === 90 && (
+        {rot === 90 && packingMode !== 'diagonal' && (
           <text x={scaledX + scaledWidth - 2} y={scaledY + 8}
             textAnchor="end" className="fill-white font-bold" fontSize="6">↻</text>
         )}
         <title>
-          {label}{'\n'}Position: ({component.x}, {component.y})mm
-          {'\n'}Size: {component.width}×{component.height}mm
-          {component.rotation === 90 ? '\nRotated 90°' : ''}
+          {label}{'\n'}Position: ({component.x}, {component.y})mm{'\n'}
+          Size: {component.width}×{component.height}mm
+          {rot === 90 && packingMode !== 'diagonal' ? '\nRotated 90°' : ''}
           {component.priority ? `\nPriority: ${component.priority}` : ''}
         </title>
       </g>
@@ -136,7 +144,7 @@ const TrayVisualization: React.FC<TrayVisualizationProps> = ({
         <p className="text-sm text-muted-foreground">
           Scale: 1:{Math.round(1 / scale)} | Tray: {tray.width}×{tray.depth}mm
           {gridColumns && gridRows && ` | Grid: ${gridColumns}×${gridRows}`}
-          {packingMode === 'diagonal' && ' | 45° diagonal packing'}
+          {packingMode === 'diagonal' && ' | Variable-angle diagonal packing'}
         </p>
       </div>
 
@@ -170,7 +178,7 @@ const TrayVisualization: React.FC<TrayVisualizationProps> = ({
               <div className="flex items-center gap-1"><span>↻ = Rotated 90°</span></div>
             )}
             {packingMode === 'diagonal' && (
-              <div className="flex items-center gap-1"><span>◇ = 45° diagonal placement</span></div>
+              <div className="flex items-center gap-1"><span>Parts shown at optimal angle (0–45° from vertical)</span></div>
             )}
           </div>
         </div>
