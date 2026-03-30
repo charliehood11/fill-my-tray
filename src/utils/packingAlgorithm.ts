@@ -312,6 +312,7 @@ export class TrayPackingOptimizer {
     const maxPer = Math.max(minPer, this.diagonalMaxPerBar);
 
     const trayResults: TrayResult[] = [];
+    const skippedParts: DiagPart[] = [];   // parts genuinely too large for the tray
     let partStart = 0;
     let trayNumber = 1;
 
@@ -338,8 +339,11 @@ export class TrayPackingOptimizer {
           // Flight bar height = largest bounding-box among these parts
           const barH = Math.max(...barParts.map(p => (p.w + p.d) / SQRT2));
 
-          // Stop if the bar doesn't fit vertically in the remaining tray space
-          if (currentY + barH > tray.depth) break;
+          // If the bar doesn't fit vertically, try with fewer parts (may reduce barH)
+          if (currentY + barH > tray.depth) {
+            targetCount--;
+            continue;
+          }
 
           // Try to place parts left-to-right
           let currentX = 0;
@@ -385,7 +389,8 @@ export class TrayPackingOptimizer {
       }
 
       if (partEnd === partStart) {
-        // No single part can fit — skip to avoid infinite loop
+        // This part cannot fit on any tray — record it as unplaceable and move on
+        skippedParts.push(parts[partStart]);
         partStart++;
         continue;
       }
@@ -408,7 +413,7 @@ export class TrayPackingOptimizer {
       trayNumber++;
     }
 
-    const unplacedComponents: Component[] = parts.slice(partStart).map(p => ({
+    const unplacedComponents: Component[] = skippedParts.map(p => ({
       id: p.id,
       w:  p.w,
       d:  p.d,
