@@ -129,8 +129,8 @@ const TrayPackingOptimizerComponent = () => {
     return initialSettings;
   });
   const [results, setResults] = useState<PackingResult | null>(null);
-  const [spacing, setSpacing] = useState(100);
-  const [edgeSpacing, setEdgeSpacing] = useState(100);
+  const [spacing, setSpacing] = useState(10);
+  const [edgeSpacing, setEdgeSpacing] = useState(0);
   const [allowRotation, setAllowRotation] = useState(true);
   const [packingMode, setPackingMode] = useState<'precise' | 'grid' | 'diagonal'>('precise');
   const [gridColumns, setGridColumns] = useState(12);
@@ -533,7 +533,7 @@ const TrayPackingOptimizerComponent = () => {
                     min="0"
                     max="500"
                   />
-                  <p className="text-sm text-gray-600 mt-1">Minimum distance between components</p>
+                  <p className="text-sm text-gray-600 mt-1">Minimum gap between adjacent components (0 = parts can touch)</p>
                 </div>
                 <div>
                   <Label htmlFor="edgeSpacing">Edge Spacing (mm)</Label>
@@ -545,7 +545,13 @@ const TrayPackingOptimizerComponent = () => {
                     min="0"
                     max="500"
                   />
-                  <p className="text-sm text-gray-600 mt-1">Minimum distance from tray edges</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Border clearance on all 4 tray edges (0 = parts can reach the edge).
+                    {selectedTray && (() => {
+                      const t = trays.find(tr => tr.id === selectedTray);
+                      return t ? ` Usable area: ${t.width - 2 * edgeSpacing} × ${t.depth - 2 * edgeSpacing}mm` : '';
+                    })()}
+                  </p>
                 </div>
                 <div className="flex items-center space-x-2">
                   <input
@@ -692,6 +698,23 @@ const TrayPackingOptimizerComponent = () => {
                     </CardContent>
                   </Card>
                 </div>
+
+                {results.totalTraysUsed === 0 && (
+                  <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 space-y-1">
+                    <p className="font-semibold">Nothing could be placed on the tray.</p>
+                    <p>This usually means one or more parts are too large for the selected tray given the current spacing settings. Try:</p>
+                    <ul className="list-disc pl-5 space-y-0.5">
+                      <li>Reducing <strong>Edge Spacing</strong> and/or <strong>Component Spacing</strong> in Settings (currently {edgeSpacing}mm edge, {spacing}mm between parts)</li>
+                      <li>Switching to a larger tray in the Selection tab</li>
+                      <li>Checking that your part dimensions (w × d) don't exceed the tray dimensions</li>
+                    </ul>
+                    <p className="text-xs text-red-600 mt-1">
+                      Selected tray: {trays.find(t => t.id === selectedTray)?.name || selectedTray}
+                      {' '}({trays.find(t => t.id === selectedTray)?.width} × {trays.find(t => t.id === selectedTray)?.depth}mm).
+                      Usable area with current spacing: {(trays.find(t => t.id === selectedTray)?.width ?? 0) - 2 * edgeSpacing} × {(trays.find(t => t.id === selectedTray)?.depth ?? 0) - 2 * edgeSpacing}mm.
+                    </p>
+                  </div>
+                )}
 
                 {results.trayResults.map((trayResult) => (
                   <Card key={trayResult.trayNumber}>
