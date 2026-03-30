@@ -322,52 +322,66 @@ export class TrayPackingOptimizer {
       let idx      = partStart;
 
       while (idx < parts.length) {
-        // Decide how many parts go in this flight bar
-        const remaining  = parts.length - idx;
-        const barCount   = this.randomize
+        // Decide the initial target count for this flight bar
+        const remaining = parts.length - idx;
+        let targetCount = this.randomize
           ? Math.floor(Math.random() * (Math.min(maxPer, remaining) - minPer + 1)) + minPer
           : Math.min(maxPer, remaining);
 
-        const barParts = parts.slice(idx, idx + barCount);
+        // Try targetCount; if parts don't fit horizontally, reduce by 1 and retry
+        // (down to 1). This ensures parts are never silently skipped due to a
+        // random count that exceeds the physical tray width.
+        let placed = false;
+        while (targetCount >= 1) {
+          const barParts = parts.slice(idx, idx + targetCount);
 
-        // Flight bar height = largest bounding-box side among parts in the bar
-        const barH = Math.max(...barParts.map(p => (p.w + p.d) / SQRT2));
+          // Flight bar height = largest bounding-box among these parts
+          const barH = Math.max(...barParts.map(p => (p.w + p.d) / SQRT2));
 
-        // Stop if the bar doesn't fit vertically in the remaining tray space
-        if (currentY + barH > tray.depth) break;
+          // Stop if the bar doesn't fit vertically in the remaining tray space
+          if (currentY + barH > tray.depth) break;
 
-        // Try to place parts left-to-right within the bar
-        let currentX  = 0;
-        let allFit    = true;
-        const tempPlaced: PlacedComponent[] = [];
+          // Try to place parts left-to-right
+          let currentX = 0;
+          let allFit   = true;
+          const tempPlaced: PlacedComponent[] = [];
 
-        for (const part of barParts) {
-          const bbox = (part.w + part.d) / SQRT2;
-          if (currentX + bbox > tray.width) {
-            allFit = false;
+          for (const part of barParts) {
+            const bbox = (part.w + part.d) / SQRT2;
+            if (currentX + bbox > tray.width) {
+              allFit = false;
+              break;
+            }
+            tempPlaced.push({
+              id:       part.id,
+              name:     part.name,
+              w:        part.w,
+              d:        part.d,
+              priority: part.priority,
+              x:        currentX,
+              y:        currentY,
+              width:    bbox,
+              height:   barH,
+              rotation: 45,
+            });
+            currentX += bbox;
+          }
+
+          if (allFit) {
+            placedComponents.push(...tempPlaced);
+            idx      += targetCount;
+            partEnd   = idx;
+            currentY += barH;
+            placed    = true;
             break;
           }
-          tempPlaced.push({
-            id:       part.id,
-            name:     part.name,
-            w:        part.w,
-            d:        part.d,
-            priority: part.priority,
-            x:        currentX,
-            y:        currentY,
-            width:    bbox,    // bounding-box width
-            height:   barH,    // use uniform bar height so parts align
-            rotation: 45,
-          });
-          currentX += bbox;
+
+          // Doesn't fit — try one fewer part
+          targetCount--;
         }
 
-        if (!allFit) break; // This bar can't even fit its parts → move to next tray
-
-        placedComponents.push(...tempPlaced);
-        idx      += barCount;
-        partEnd   = idx;
-        currentY += barH;
+        // If even 1 part can't fit horizontally or vertically, stop filling this tray
+        if (!placed) break;
       }
 
       if (partEnd === partStart) {
