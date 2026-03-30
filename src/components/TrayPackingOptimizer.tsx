@@ -120,7 +120,7 @@ const validateComponents = (data: unknown): Component[] => {
 const TrayPackingOptimizerComponent = () => {
   const [trays, setTrays] = useState<Tray[]>(defaultTrays);
   const [components, setComponents] = useState<Component[]>(defaultComponents);
-  const [selectedTray, setSelectedTray] = useState<string>('');
+  const [selectedTray, setSelectedTray] = useState<string>(defaultTrays[0]?.id ?? '');
   const [componentSettings, setComponentSettings] = useState<{[key: string]: {numBatches: number, batchSize: number, priority: 'low' | 'medium' | 'high' | 'critical'}}>(() => {
     const initialSettings: {[key: string]: {numBatches: number, batchSize: number, priority: 'low' | 'medium' | 'high' | 'critical'}} = {};
     defaultComponents.forEach(comp => {
@@ -150,7 +150,7 @@ const TrayPackingOptimizerComponent = () => {
         const data = JSON.parse(e.target?.result as string);
         const trayList = validateTrays(data);
         setTrays(trayList);
-        setSelectedTray(''); // Reset selection when new data is uploaded
+        setSelectedTray(trayList[0]?.id ?? ''); // Auto-select first tray
       } catch (error) {
         console.error('Error parsing tray JSON:', error);
         toast({
@@ -506,6 +506,18 @@ const TrayPackingOptimizerComponent = () => {
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">
+            {selectedTray ? (
+              <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                <span className="font-medium">Selected tray:</span>
+                <span>{trays.find(t => t.id === selectedTray)?.name || selectedTray}
+                  {' '}({trays.find(t => t.id === selectedTray)?.width}×{trays.find(t => t.id === selectedTray)?.depth}mm)
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                <span>No tray selected — go to the <strong>Selection</strong> tab to pick one before running.</span>
+              </div>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>Optimization Settings</CardTitle>
