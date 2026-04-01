@@ -273,7 +273,9 @@ export class TrayPackingOptimizer {
     // At angle θ from vertical, for a w×d rectangle (w = long side):
     //   bboxW = w·sin(θ) + d·cos(θ)   ← horizontal footprint in the flight bar
     //   bboxH = w·cos(θ) + d·sin(θ)   ← bar height contribution
-    const CANDIDATE_ANGLES = [5, 10, 15, 20, 25, 30, 35, 40, 45]; // degrees from vertical (never 0°)
+    // Angles are tried in order; the one that fits the most parts wins.
+    // Goes beyond 45° only when needed for large parts that won't fit otherwise.
+    const CANDIDATE_ANGLES = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85];
 
     const bbox = (w: number, d: number, thetaDeg: number) => {
       const r = thetaDeg * Math.PI / 180;

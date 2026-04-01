@@ -606,10 +606,11 @@ const TrayPackingOptimizerComponent = () => {
                   {packingMode === 'diagonal' && (
                     <div className="space-y-3 pl-4 border-l-2 border-indigo-200">
                       <p className="text-sm text-muted-foreground">
-                        Parts are packed at the optimal angle between 5° and 45° from vertical
-                        to maximise how many fit per flight bar. Parts are never placed
-                        vertically. Narrow ribs stay near-vertical; wider parts tilt further.
-                        Parts are grouped into horizontal flight bars.
+                        Parts are packed at the optimal angle (5°–85° from vertical) to
+                        maximise how many fit per flight bar. The algorithm prefers shallower
+                        angles and only tilts further when necessary to fit large parts.
+                        Parts are never placed fully vertical. Parts are grouped into horizontal
+                        flight bars.
                       </p>
                       <div className="grid grid-cols-2 gap-4">
                         <div>

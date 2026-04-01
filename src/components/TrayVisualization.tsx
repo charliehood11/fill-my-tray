@@ -178,7 +178,7 @@ const TrayVisualization: React.FC<TrayVisualizationProps> = ({
               <div className="flex items-center gap-1"><span>↻ = Rotated 90°</span></div>
             )}
             {packingMode === 'diagonal' && (
-              <div className="flex items-center gap-1"><span>Parts shown at optimal angle (5–45° from vertical, never vertical)</span></div>
+              <div className="flex items-center gap-1"><span>Parts shown at optimal angle (5–85° from vertical, never fully vertical)</span></div>
             )}
           </div>
         </div>
