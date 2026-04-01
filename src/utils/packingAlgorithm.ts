@@ -269,11 +269,11 @@ export class TrayPackingOptimizer {
    */
   private diagonalPack(tray: Tray, components: Component[]): PackingResult {
 
-    // Candidate angles from vertical (0° = part standing vertical, 45° = diagonal)
+    // Candidate angles from vertical (minimum 5° — parts must never be vertical)
     // At angle θ from vertical, for a w×d rectangle (w = long side):
     //   bboxW = w·sin(θ) + d·cos(θ)   ← horizontal footprint in the flight bar
     //   bboxH = w·cos(θ) + d·sin(θ)   ← bar height contribution
-    const CANDIDATE_ANGLES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45]; // degrees from vertical
+    const CANDIDATE_ANGLES = [5, 10, 15, 20, 25, 30, 35, 40, 45]; // degrees from vertical (never 0°)
 
     const bbox = (w: number, d: number, thetaDeg: number) => {
       const r = thetaDeg * Math.PI / 180;
@@ -380,46 +380,41 @@ export class TrayPackingOptimizer {
         const remaining = parts.length - idx;
         const wantCount = Math.min(maxPer, remaining);
 
-        // Find the best angle + count, trying from wantCount down to 1
-        let placed = false;
-        for (let tryCount = wantCount; tryCount >= 1; tryCount--) {
-          const best = findBestBar(idx, tryCount, currentY);
-          if (best.count < tryCount) continue; // couldn't fit all tryCount parts — reduce
+        // findBestBar already scans every candidate angle and returns the true
+        // best (angle, count) pair — no outer retry loop needed.
+        const best = findBestBar(idx, wantCount, currentY);
 
-          // Build the placed parts using the chosen angle
-          const tempPlaced: PlacedComponent[] = [];
-          let x = 0;
+        // Nothing fits on this tray at all — start a fresh tray
+        if (best.count === 0) break;
 
-          for (let i = idx; i < idx + best.count; i++) {
-            const p = parts[i];
-            const { bboxW } = bbox(p.w, p.d, best.angleDeg);
-            // SVG rotation: 90° - angleDeg  (0°from-vertical → rotate 90°, 45° → rotate 45°)
-            const svgRotation = 90 - best.angleDeg;
-            tempPlaced.push({
-              id:       p.id,
-              name:     p.name,
-              w:        p.w,
-              d:        p.d,
-              priority: p.priority,
-              x,
-              y:        currentY,
-              width:    bboxW,
-              height:   best.barH,
-              rotation: svgRotation,
-            });
-            x += bboxW;
-          }
+        // Build the placed parts using the chosen angle
+        const tempPlaced: PlacedComponent[] = [];
+        let x = 0;
 
-          placedComponents.push(...tempPlaced);
-          idx      += best.count;
-          partEnd   = idx;
-          currentY += best.barH;
-          placed    = true;
-          break;
+        for (let i = idx; i < idx + best.count; i++) {
+          const p = parts[i];
+          const { bboxW } = bbox(p.w, p.d, best.angleDeg);
+          // SVG rotation: 90° - angleDeg  (5°from-vertical → svgRot 85°, 45° → svgRot 45°)
+          const svgRotation = 90 - best.angleDeg;
+          tempPlaced.push({
+            id:       p.id,
+            name:     p.name,
+            w:        p.w,
+            d:        p.d,
+            priority: p.priority,
+            x,
+            y:        currentY,
+            width:    bboxW,
+            height:   best.barH,
+            rotation: svgRotation,
+          });
+          x += bboxW;
         }
 
-        // If even 1 part can't fit, this tray is full — start a new one
-        if (!placed) break;
+        placedComponents.push(...tempPlaced);
+        idx      += best.count;
+        partEnd   = idx;
+        currentY += best.barH;
       }
 
       if (partEnd === partStart) {
