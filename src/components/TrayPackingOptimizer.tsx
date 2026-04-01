@@ -633,7 +633,7 @@ const TrayPackingOptimizerComponent = () => {
                           data-testid="checkbox-randomize"
                         />
                         <Label htmlFor="randomize" className="cursor-pointer">
-                          Randomise part order and flight bar count
+                          Randomise part order (bars always fill to maximum)
                         </Label>
                       </div>
                     </div>

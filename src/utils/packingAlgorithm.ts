@@ -375,11 +375,10 @@ export class TrayPackingOptimizer {
       let idx      = partStart;
 
       while (idx < parts.length) {
-        // Desired count for this flight bar (random or max)
+        // Always try to fill up to the maximum per bar.
+        // Randomise only affects part ORDER (handled by the Fisher-Yates shuffle above).
         const remaining = parts.length - idx;
-        const wantCount = this.randomize
-          ? Math.floor(Math.random() * (Math.min(maxPer, remaining) - minPer + 1)) + minPer
-          : Math.min(maxPer, remaining);
+        const wantCount = Math.min(maxPer, remaining);
 
         // Find the best angle + count, trying from wantCount down to 1
         let placed = false;
