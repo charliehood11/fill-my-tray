@@ -18,7 +18,7 @@ const defaultTrays: Tray[] = [
   {"id":"tray02","width":3400,"depth":1000},
   {"id":"pfd_tray","name":"PFD tray","width":2700,"depth":1070},
   {"id":"s03_fb","name":"S03 FB","width":4000,"depth":2000},
-  {"id":"tray_1800x1200","name":"1800×1200 tray","width":1800,"depth":1200}
+  {"id":"tray_1800x1200","name":"S09 tray","width":1800,"depth":1200}
 ];
 
 const defaultComponents: Component[] = [
