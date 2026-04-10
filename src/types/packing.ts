@@ -69,10 +69,10 @@ export interface PackingOptions {
   edgeSpacing: number;
   allowRotation: boolean;
   optimizationLevel: 'fast' | 'balanced' | 'thorough';
-  packingMode?: 'precise' | 'grid' | 'diagonal';
+  packingMode?: 'precise' | 'grid' | 'diagonal' | 'shelf';
   gridColumns?: number; // Default 12 — columns per flight bar
   gridRows?: number;   // Default 5  — number of flight bars
-  randomize?: boolean;          // Diagonal mode: randomise part order
+  randomize?: boolean;          // Diagonal / shelf mode: randomise batch/part order
   diagonalMinPerBar?: number;   // Diagonal mode: min parts per flight bar (default 1)
   diagonalMaxPerBar?: number;   // Diagonal mode: max parts per flight bar (default 4)
 }

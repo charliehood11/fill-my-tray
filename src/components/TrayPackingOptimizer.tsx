@@ -133,7 +133,7 @@ const TrayPackingOptimizerComponent = () => {
   const [spacing, setSpacing] = useState(10);
   const [edgeSpacing, setEdgeSpacing] = useState(0);
   const [allowRotation, setAllowRotation] = useState(true);
-  const [packingMode, setPackingMode] = useState<'precise' | 'grid' | 'diagonal'>('precise');
+  const [packingMode, setPackingMode] = useState<'precise' | 'grid' | 'diagonal' | 'shelf'>('precise');
   const [gridColumns, setGridColumns] = useState(12);
   const [gridRows, setGridRows] = useState(5);
   const [randomize, setRandomize] = useState(false);
@@ -585,6 +585,12 @@ const TrayPackingOptimizerComponent = () => {
                         onChange={() => setPackingMode('diagonal')} />
                       <span className="text-sm">Diagonal 45° — S03 FB</span>
                     </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="packingMode" value="shelf"
+                        checked={packingMode === 'shelf'}
+                        onChange={() => setPackingMode('shelf')} />
+                      <span className="text-sm">Batch Mix (tight shelf, randomised order)</span>
+                    </label>
                   </div>
 
                   {packingMode === 'grid' && (
@@ -637,6 +643,30 @@ const TrayPackingOptimizerComponent = () => {
                         />
                         <Label htmlFor="randomize" className="cursor-pointer">
                           Randomise part order (bars always fill to maximum)
+                        </Label>
+                      </div>
+                    </div>
+                  )}
+
+                  {packingMode === 'shelf' && (
+                    <div className="space-y-3 pl-4 border-l-2 border-emerald-200">
+                      <p className="text-sm text-muted-foreground">
+                        Parts are placed at their actual dimensions — no fixed grid cells,
+                        no wasted cell padding. Parts are packed left-to-right in shelves;
+                        a new shelf starts whenever the next part would overflow the width.
+                        Enable randomise to shuffle batch order so different part types are
+                        spread across trays rather than grouped by part number.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="shelfRandomize"
+                          checked={randomize}
+                          onChange={(e) => setRandomize(e.target.checked)}
+                          data-testid="checkbox-shelf-randomize"
+                        />
+                        <Label htmlFor="shelfRandomize" className="cursor-pointer">
+                          Randomise batch order
                         </Label>
                       </div>
                     </div>

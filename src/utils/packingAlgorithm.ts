@@ -35,7 +35,7 @@ export class TrayPackingOptimizer {
   private edgeSpacing: number;
   private allowRotation: boolean;
   private optimizationLevel: string;
-  private packingMode: 'precise' | 'grid' | 'diagonal';
+  private packingMode: 'precise' | 'grid' | 'diagonal' | 'shelf';
   private gridColumns: number;
   private gridRows: number;
   private randomize: boolean;
@@ -65,6 +65,11 @@ export class TrayPackingOptimizer {
     if (this.packingMode === 'diagonal') {
       // Diagonal mode: 45° placement, randomisable, min–max per flight bar
       return this.diagonalPack(tray, components);
+    }
+
+    if (this.packingMode === 'shelf') {
+      // Shelf / Batch-Mix mode: shuffled batch order, tight shelf packing
+      return this.shelfPack(tray, components);
     }
 
     // Precise mode: expand by numBatches × batchSize and place individually
@@ -247,6 +252,195 @@ export class TrayPackingOptimizer {
       unplacedComponents:    unplacedBatches,
       totalTraysUsed:        trayResults.length,
       totalComponentsPlaced: batchesPlaced,
+      averageEfficiency:     avgEfficiency,
+      recommendations:       [],
+    };
+  }
+
+  // ─── Shelf / Batch-Mix Packing ──────────────────────────────────────────────
+
+  /**
+   * Tight shelf-packing with randomised batch order.
+   *
+   * Rules:
+   *  • All batches from all components are collected and, if randomize is on,
+   *    shuffled so different part types are interleaved across trays.
+   *  • Parts are placed left-to-right using their actual w×d dimensions —
+   *    no fixed grid cells, no empty cell padding.
+   *  • A new shelf starts whenever the next part would exceed the tray width.
+   *    The shelf height equals the tallest part placed in it.
+   *  • If allowRotation is true each part is also tried rotated 90° and the
+   *    orientation that wastes less horizontal space is preferred.
+   */
+  private shelfPack(tray: Tray, components: Component[]): PackingResult {
+    // 1. Build flat list of batches
+    interface ShelfBatch {
+      compId: string;
+      compName?: string;
+      priority?: Component['priority'];
+      batchIdx: number;
+      batchSize: number;
+      w: number;
+      d: number;
+    }
+
+    const batches: ShelfBatch[] = [];
+    for (const comp of components) {
+      const numBatches = Math.max(1, Math.round(Number(comp.numBatches) || 1));
+      const batchSize  = Math.max(1, Math.round(Number(comp.batchSize)  || 1));
+      for (let b = 0; b < numBatches; b++) {
+        batches.push({
+          compId:    comp.id,
+          compName:  comp.name,
+          priority:  comp.priority,
+          batchIdx:  b,
+          batchSize,
+          w:         comp.w,
+          d:         comp.d,
+        });
+      }
+    }
+
+    // 2. Shuffle batch order if randomise is on
+    if (this.randomize) {
+      for (let i = batches.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [batches[i], batches[j]] = [batches[j], batches[i]];
+      }
+    }
+
+    // 3. Expand into individual parts while keeping batch order
+    interface ShelfPart {
+      id: string;
+      name: string;
+      priority?: Component['priority'];
+      w: number;
+      d: number;
+    }
+
+    const parts: ShelfPart[] = [];
+    for (const batch of batches) {
+      const label = `${batch.compName || batch.compId} (B${batch.batchIdx + 1})`;
+      for (let p = 0; p < batch.batchSize; p++) {
+        parts.push({
+          id:       `${batch.compId}_b${batch.batchIdx}_p${p}`,
+          name:     label,
+          priority: batch.priority,
+          w:        batch.w,
+          d:        batch.d,
+        });
+      }
+    }
+
+    // 4. Shelf-pack: place parts tightly, left-to-right, new shelf when full
+    const sp = this.spacing;
+    const ep = this.edgeSpacing;
+
+    const trayResults: TrayResult[] = [];
+    const skipped: ShelfPart[] = [];
+    let partIdx  = 0;
+    let trayNumber = 1;
+
+    while (partIdx < parts.length) {
+      const placedComponents: PlacedComponent[] = [];
+      let shelfX  = ep;
+      let shelfY  = ep;
+      let shelfH  = 0;
+      const startIdx = partIdx;
+
+      while (partIdx < parts.length) {
+        const part = parts[partIdx];
+
+        // Choose orientation: prefer landscape (w > d); rotate if it fits better
+        let pw = part.w, pd = part.d, rot: number = 0;
+        if (this.allowRotation) {
+          // Try both orientations and pick the one that wastes less horizontal space
+          const remainingX = tray.width - ep - shelfX;
+          const fitNormal   = pw <= remainingX;
+          const fitRotated  = pd <= remainingX;
+          if (!fitNormal && fitRotated) {
+            [pw, pd] = [pd, pw];
+            rot = 90;
+          } else if (fitNormal && fitRotated && pd < pw) {
+            // Both fit — use the shorter one to save shelf height
+            [pw, pd] = [pd, pw];
+            rot = 90;
+          }
+        }
+
+        // Skip part permanently if it's too large for ANY shelf on ANY tray
+        if (pw > tray.width - 2 * ep || pd > tray.depth - 2 * ep) {
+          skipped.push(part);
+          partIdx++;
+          continue;
+        }
+
+        // Does it fit on the current shelf?
+        if (shelfX + pw > tray.width - ep) {
+          // Start a new shelf
+          shelfY += shelfH + sp;
+          shelfX  = ep;
+          shelfH  = 0;
+        }
+
+        // Does the new (or current) shelf fit vertically?
+        if (shelfY + pd > tray.depth - ep) {
+          break; // Tray full — continue on next tray
+        }
+
+        placedComponents.push({
+          id:       part.id,
+          name:     part.name,
+          priority: part.priority,
+          w:        part.w,
+          d:        part.d,
+          x:        shelfX,
+          y:        shelfY,
+          width:    pw,
+          height:   pd,
+          rotation: rot,
+        });
+
+        shelfH  = Math.max(shelfH, pd);
+        shelfX += pw + sp;
+        partIdx++;
+      }
+
+      if (placedComponents.length === 0 && partIdx === startIdx) break; // safety
+
+      const totalArea = tray.width * tray.depth;
+      const usedArea  = placedComponents.reduce((sum, c) => sum + c.w * c.d, 0);
+
+      trayResults.push({
+        tray:           { ...tray, id: `${tray.id}_${trayNumber}` },
+        trayNumber,
+        placedComponents,
+        totalArea,
+        usedArea,
+        efficiency:     (usedArea / totalArea) * 100,
+        remainingSpace: [],
+      });
+
+      trayNumber++;
+    }
+
+    const avgEfficiency = trayResults.length > 0
+      ? trayResults.reduce((sum, r) => sum + r.efficiency, 0) / trayResults.length
+      : 0;
+
+    return {
+      trayResults,
+      unplacedComponents: skipped.map(p => ({
+        id:        p.id,
+        w:         p.w,
+        d:         p.d,
+        name:      p.name,
+        numBatches: 1,
+        batchSize:  1,
+        priority:  p.priority,
+      })),
+      totalTraysUsed:        trayResults.length,
+      totalComponentsPlaced: parts.length - skipped.length,
       averageEfficiency:     avgEfficiency,
       recommendations:       [],
     };
