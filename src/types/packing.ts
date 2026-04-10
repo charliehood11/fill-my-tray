@@ -73,6 +73,7 @@ export interface PackingOptions {
   gridColumns?: number; // Default 12 — columns per flight bar
   gridRows?: number;   // Default 5  — number of flight bars
   randomize?: boolean;          // Diagonal / shelf mode: randomise batch/part order
+  shelfGridFill?: boolean;      // Shelf mode: snap parts to grid cells, overflow into neighbours OK
   diagonalMinPerBar?: number;   // Diagonal mode: min parts per flight bar (default 1)
   diagonalMaxPerBar?: number;   // Diagonal mode: max parts per flight bar (default 4)
 }

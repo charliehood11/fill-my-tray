@@ -39,6 +39,7 @@ export class TrayPackingOptimizer {
   private gridColumns: number;
   private gridRows: number;
   private randomize: boolean;
+  private shelfGridFill: boolean;
   private diagonalMinPerBar: number;
   private diagonalMaxPerBar: number;
 
@@ -51,6 +52,7 @@ export class TrayPackingOptimizer {
     this.gridColumns = options.gridColumns || 12;
     this.gridRows = options.gridRows || 5;
     this.randomize = options.randomize ?? false;
+    this.shelfGridFill = options.shelfGridFill ?? false;
     this.diagonalMinPerBar = options.diagonalMinPerBar ?? 1;
     this.diagonalMaxPerBar = options.diagonalMaxPerBar ?? 4;
   }
@@ -343,67 +345,102 @@ export class TrayPackingOptimizer {
 
     while (partIdx < parts.length) {
       const placedComponents: PlacedComponent[] = [];
-      let shelfX  = ep;
-      let shelfY  = ep;
-      let shelfH  = 0;
       const startIdx = partIdx;
 
-      while (partIdx < parts.length) {
-        const part = parts[partIdx];
+      if (this.shelfGridFill) {
+        // ── Grid-fill variant ──────────────────────────────────────────────
+        // Lay a grid of cells over the tray. Place each part at the first
+        // unoccupied cell. The part uses its actual dimensions so it may
+        // span several cells; those neighbouring cells are marked occupied
+        // and skipped for future parts.
+        const cols    = this.gridColumns;
+        const rows    = this.gridRows;
+        const cellW   = (tray.width  - 2 * ep) / cols;
+        const cellH   = (tray.depth  - 2 * ep) / rows;
+        const occupied = new Set<number>(); // cell index = row*cols + col
 
-        // Choose orientation: prefer landscape (w > d); rotate if it fits better
-        let pw = part.w, pd = part.d, rot: number = 0;
-        if (this.allowRotation) {
-          // Try both orientations and pick the one that wastes less horizontal space
-          const remainingX = tray.width - ep - shelfX;
-          const fitNormal   = pw <= remainingX;
-          const fitRotated  = pd <= remainingX;
-          if (!fitNormal && fitRotated) {
-            [pw, pd] = [pd, pw];
-            rot = 90;
-          } else if (fitNormal && fitRotated && pd < pw) {
-            // Both fit — use the shorter one to save shelf height
-            [pw, pd] = [pd, pw];
-            rot = 90;
+        let cellIdx = 0; // scan pointer
+
+        while (partIdx < parts.length && cellIdx < cols * rows) {
+          // Advance to the next free cell
+          while (cellIdx < cols * rows && occupied.has(cellIdx)) cellIdx++;
+          if (cellIdx >= cols * rows) break;
+
+          const col = cellIdx % cols;
+          const row = Math.floor(cellIdx / cols);
+          const x   = ep + col * cellW;
+          const y   = ep + row * cellH;
+
+          const part = parts[partIdx];
+          let pw = part.w, pd = part.d, rot: number = 0;
+          if (this.allowRotation && pd > pw) { [pw, pd] = [pd, pw]; rot = 90; }
+
+          // Skip permanently if larger than the whole tray
+          if (pw > tray.width - 2 * ep || pd > tray.depth - 2 * ep) {
+            skipped.push(part);
+            partIdx++;
+            continue;
           }
-        }
 
-        // Skip part permanently if it's too large for ANY shelf on ANY tray
-        if (pw > tray.width - 2 * ep || pd > tray.depth - 2 * ep) {
-          skipped.push(part);
+          // Place the part at (x, y) — overflow into neighbours is intentional
+          placedComponents.push({
+            id: part.id, name: part.name, priority: part.priority,
+            w: part.w, d: part.d, x, y, width: pw, height: pd, rotation: rot,
+          });
+
+          // Mark every cell whose top-left corner falls inside the part's footprint
+          const colSpan = Math.ceil(pw / cellW);
+          const rowSpan = Math.ceil(pd / cellH);
+          for (let r = row; r < Math.min(row + rowSpan, rows); r++) {
+            for (let c = col; c < Math.min(col + colSpan, cols); c++) {
+              occupied.add(r * cols + c);
+            }
+          }
+
           partIdx++;
-          continue;
+          cellIdx++; // move past the cell we just used
         }
+      } else {
+        // ── Shelf variant (default) ────────────────────────────────────────
+        let shelfX = ep;
+        let shelfY = ep;
+        let shelfH = 0;
 
-        // Does it fit on the current shelf?
-        if (shelfX + pw > tray.width - ep) {
-          // Start a new shelf
-          shelfY += shelfH + sp;
-          shelfX  = ep;
-          shelfH  = 0;
+        while (partIdx < parts.length) {
+          const part = parts[partIdx];
+
+          let pw = part.w, pd = part.d, rot: number = 0;
+          if (this.allowRotation) {
+            const remainingX = tray.width - ep - shelfX;
+            const fitNormal  = pw <= remainingX;
+            const fitRotated = pd <= remainingX;
+            if (!fitNormal && fitRotated) {
+              [pw, pd] = [pd, pw]; rot = 90;
+            } else if (fitNormal && fitRotated && pd < pw) {
+              [pw, pd] = [pd, pw]; rot = 90;
+            }
+          }
+
+          if (pw > tray.width - 2 * ep || pd > tray.depth - 2 * ep) {
+            skipped.push(part); partIdx++; continue;
+          }
+
+          if (shelfX + pw > tray.width - ep) {
+            shelfY += shelfH + sp; shelfX = ep; shelfH = 0;
+          }
+
+          if (shelfY + pd > tray.depth - ep) break;
+
+          placedComponents.push({
+            id: part.id, name: part.name, priority: part.priority,
+            w: part.w, d: part.d, x: shelfX, y: shelfY,
+            width: pw, height: pd, rotation: rot,
+          });
+
+          shelfH  = Math.max(shelfH, pd);
+          shelfX += pw + sp;
+          partIdx++;
         }
-
-        // Does the new (or current) shelf fit vertically?
-        if (shelfY + pd > tray.depth - ep) {
-          break; // Tray full — continue on next tray
-        }
-
-        placedComponents.push({
-          id:       part.id,
-          name:     part.name,
-          priority: part.priority,
-          w:        part.w,
-          d:        part.d,
-          x:        shelfX,
-          y:        shelfY,
-          width:    pw,
-          height:   pd,
-          rotation: rot,
-        });
-
-        shelfH  = Math.max(shelfH, pd);
-        shelfX += pw + sp;
-        partIdx++;
       }
 
       if (placedComponents.length === 0 && partIdx === startIdx) break; // safety
