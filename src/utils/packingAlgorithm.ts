@@ -374,18 +374,29 @@ export class TrayPackingOptimizer {
           const part = parts[partIdx];
           let pw = part.w, pd = part.d, rot: number = 0;
           if (this.allowRotation) {
-            const usableW = tray.width  - 2 * ep;
-            const usableD = tray.depth  - 2 * ep;
-            const fitsNorm = part.w <= usableW && part.d <= usableD;
-            const fitsRot  = part.d <= usableW && part.w <= usableD;
-            // Rotate if: only rotated orientation fits, OR both fit but part is taller than wide
+            const usableW  = tray.width  - 2 * ep;
+            const usableD  = tray.depth  - 2 * ep;
+            const fitsNorm  = part.w <= usableW && part.d <= usableD;
+            const fitsRot   = part.d <= usableW && part.w <= usableD;
+            const fitsNormW = part.w <= usableW; // fits width (may overflow depth)
+            const fitsRotW  = part.d <= usableW; // rotated fits width (may overflow depth)
             if ((!fitsNorm && fitsRot) || (fitsNorm && fitsRot && part.d > part.w)) {
+              // Rotated fits fully, or both fit fully and rotated is more compact
               pw = part.d; pd = part.w; rot = 90;
+            } else if (!fitsNorm && !fitsRot) {
+              // Neither fits fully — pick the orientation with smallest depth overflow
+              if (!fitsNormW && fitsRotW) {
+                pw = part.d; pd = part.w; rot = 90; // only rotated fits width
+              } else if (fitsNormW && fitsRotW) {
+                // Both fit width — use whichever has the shorter depth
+                if (part.w < part.d) { pw = part.d; pd = part.w; rot = 90; }
+              }
+              // else: only normal fits width — keep original
             }
           }
 
-          // Skip permanently if larger than the whole tray in any orientation
-          if (pw > tray.width - 2 * ep || pd > tray.depth - 2 * ep) {
+          // Skip only if the part cannot fit width-wise at all; depth overflow is allowed
+          if (pw > tray.width - 2 * ep) {
             skipped.push(part);
             partIdx++;
             continue;
