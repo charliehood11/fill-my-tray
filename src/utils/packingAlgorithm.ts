@@ -373,9 +373,18 @@ export class TrayPackingOptimizer {
 
           const part = parts[partIdx];
           let pw = part.w, pd = part.d, rot: number = 0;
-          if (this.allowRotation && pd > pw) { [pw, pd] = [pd, pw]; rot = 90; }
+          if (this.allowRotation) {
+            const usableW = tray.width  - 2 * ep;
+            const usableD = tray.depth  - 2 * ep;
+            const fitsNorm = part.w <= usableW && part.d <= usableD;
+            const fitsRot  = part.d <= usableW && part.w <= usableD;
+            // Rotate if: only rotated orientation fits, OR both fit but part is taller than wide
+            if ((!fitsNorm && fitsRot) || (fitsNorm && fitsRot && part.d > part.w)) {
+              pw = part.d; pd = part.w; rot = 90;
+            }
+          }
 
-          // Skip permanently if larger than the whole tray
+          // Skip permanently if larger than the whole tray in any orientation
           if (pw > tray.width - 2 * ep || pd > tray.depth - 2 * ep) {
             skipped.push(part);
             partIdx++;
