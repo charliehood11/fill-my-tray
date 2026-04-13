@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -137,7 +137,19 @@ const TrayPackingOptimizerComponent = () => {
   const [packingMode, setPackingMode] = useState<'precise' | 'grid' | 'diagonal' | 'shelf'>('precise');
   const [gridColumns, setGridColumns] = useState(12);
   const [gridRows, setGridRows] = useState(5);
+  const [shelfGridFill, setShelfGridFill] = useState(false);
   const [randomize, setRandomize] = useState(false);
+
+  // Auto-configure settings when the S09 hook tray is selected
+  useEffect(() => {
+    if (selectedTray === 'S09 hook') {
+      setPackingMode('shelf');
+      setShelfGridFill(true);
+      setGridColumns(2);
+      setGridRows(7);
+      setRandomize(true);
+    }
+  }, [selectedTray]);
   const [diagonalMinPerBar, setDiagonalMinPerBar] = useState(1);
   const [diagonalMaxPerBar, setDiagonalMaxPerBar] = useState(4);
 
@@ -277,6 +289,7 @@ const TrayPackingOptimizerComponent = () => {
       gridColumns,
       gridRows,
       randomize,
+      shelfGridFill,
       diagonalMinPerBar,
       diagonalMaxPerBar,
     });
@@ -670,6 +683,34 @@ const TrayPackingOptimizerComponent = () => {
                           Randomise batch order
                         </Label>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="shelfGridFill"
+                          checked={shelfGridFill}
+                          onChange={(e) => setShelfGridFill(e.target.checked)}
+                          data-testid="checkbox-shelf-grid-fill"
+                        />
+                        <Label htmlFor="shelfGridFill" className="cursor-pointer">
+                          Grid fill (snap parts to grid, overflow into neighbours OK)
+                        </Label>
+                      </div>
+                      {shelfGridFill && (
+                        <div className="grid grid-cols-2 gap-4 pl-4">
+                          <div>
+                            <Label htmlFor="shelfGridCols">Columns</Label>
+                            <Input id="shelfGridCols" type="number" value={gridColumns}
+                              onChange={(e) => setGridColumns(Math.max(1, Number(e.target.value)))}
+                              min="1" max="50" />
+                          </div>
+                          <div>
+                            <Label htmlFor="shelfGridRows">Rows</Label>
+                            <Input id="shelfGridRows" type="number" value={gridRows}
+                              onChange={(e) => setGridRows(Math.max(1, Number(e.target.value)))}
+                              min="1" max="50" />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
