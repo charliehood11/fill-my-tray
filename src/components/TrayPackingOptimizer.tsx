@@ -741,7 +741,7 @@ const TrayPackingOptimizerComponent = () => {
           <TabsContent value="results" className="space-y-6">
             {results ? (
               <div className="grid gap-6">
-                <div className="grid md:grid-cols-4 gap-4">
+                <div className="grid md:grid-cols-5 gap-4">
                   <Card>
                     <CardContent className="p-6 text-center">
                       <h3 className="font-semibold text-2xl text-blue-600">
@@ -772,6 +772,16 @@ const TrayPackingOptimizerComponent = () => {
                         {results.averageEfficiency.toFixed(1)}%
                       </h3>
                       <p className="text-gray-600">Avg Efficiency</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-6 text-center">
+                      <h3 className="font-semibold text-2xl text-orange-600">
+                        {results.totalTraysUsed > 0
+                          ? (results.totalComponentsPlaced / results.totalTraysUsed).toFixed(1)
+                          : '—'}
+                      </h3>
+                      <p className="text-gray-600">Avg Parts / Tray</p>
                     </CardContent>
                   </Card>
                 </div>
