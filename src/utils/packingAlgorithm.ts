@@ -441,8 +441,18 @@ export class TrayPackingOptimizer {
             }
           }
 
+          // If the chosen orientation fails the tray size check, try the other
+          // orientation before permanently skipping the part. This prevents cases
+          // where a mid-shelf rotation decision makes a part look too large when it
+          // would fit fine un-rotated on a fresh shelf.
           if (pw > tray.width - 2 * ep || pd > tray.depth - 2 * ep) {
-            skipped.push(part); partIdx++; continue;
+            if (this.allowRotation && rot === 90) {
+              // Revert to original orientation and re-check
+              [pw, pd] = [pd, pw]; rot = 0;
+            }
+            if (pw > tray.width - 2 * ep || pd > tray.depth - 2 * ep) {
+              skipped.push(part); partIdx++; continue;
+            }
           }
 
           if (shelfX + pw > tray.width - ep) {
